@@ -1,0 +1,16 @@
+# 视频下载器 —— 只保留下载这条链路需要的依赖.
+#
+# 主线 CCC Live Studio 的那些 (pywin32 / comtypes / pyodbc / openai /
+# google-api / faster-whisper / nvidia-cuda / python-pptx / Pillow / keyring)
+# 都随模块一起剥掉了 —— 打包体积从 ~1GB 降到百来 MB, 主要就是省在这里。
+
+PyQt6>=6.6.0
+
+# yt-dlp 要跟紧: YouTube 改签名算法后旧版会 403.
+# 2026.07.04 起需要 JS 运行时 (vendor/deno) 才能走完整提取路径,
+# 见 app/infra/jsruntime.py
+yt-dlp>=2026.7.4
+
+loguru>=0.7.0
+
+pyinstaller>=6.0.0          # 仅打包时

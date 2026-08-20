@@ -1,0 +1,58 @@
+# 敏感信息 - 绝对不能提交
+.env
+.env.local
+*.key
+*.pem
+
+# Python
+__pycache__/
+.__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.Python
+*.egg-info/
+
+# 输出 / 临时文件
+output/
+*.~lock.*
+~$*
+*.tmp
+
+# 第三方二进制 (ffmpeg 等), 各开发机自己下, 不入库
+vendor/
+
+# 部署打包产物 (church-bot 上传 NAS 用, 可随时重打, 不入库)
+church-bot-deploy.zip
+
+# PyInstaller / Inno Setup 打包产物 (Sprint 6, 可随时重打, 不入库)
+# 保留 CCCLiveStudio.spec 和 installer.iss (打包脚本, 入库)
+/build/
+/dist/
+/installer_output/
+
+# 测试用讲道 PPT 素材 (各周内容, 不入库); 只保留两个模板
+docs/*.pptx
+!docs/经文诵读的模板.pptx
+!docs/本周报告事项模板.pptx
+
+# 私密凭证 (Ugreen NAS 账号等), 不入库
+docs/Ugreen_account.txt
+docs/telegram_account.txt
+
+# IDE / 工具
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/extensions.json
+.idea/
+.claude/
+*.swp
+
+# 系统
+Thumbs.db
+.DS_Store
+desktop.ini

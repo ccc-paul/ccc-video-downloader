@@ -34,9 +34,14 @@ CONFIG_PATH = APPDATA_DIR / "config.json"
 
 
 def default_download_dir() -> Path:
-    """首次运行时的保存目录: 系统「视频」文件夹, 没有就回落用户主目录."""
-    videos = Path.home() / "Videos"
-    return videos if videos.is_dir() else Path.home()
+    """首次运行时的保存目录: 系统的视频文件夹, 没有就回落用户主目录.
+
+    各平台的名字不一样 —— macOS 是 Movies 而不是 Videos, 写死 "Videos" 的话
+    Mac 上会一路回落到主目录, 下载就散在 ~ 底下了。
+    """
+    home = Path.home()
+    candidate = home / ("Movies" if sys.platform == "darwin" else "Videos")
+    return candidate if candidate.is_dir() else home
 
 
 DEFAULT_CONFIG: dict[str, Any] = {

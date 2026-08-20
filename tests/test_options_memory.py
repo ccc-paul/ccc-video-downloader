@@ -46,6 +46,22 @@ class TestDefaults:
         d = config.default_download_dir()
         assert d.is_dir(), f"{d} 不存在, 用户一点浏览就懵了"
 
+    def test_macos_uses_movies_not_videos(self, monkeypatch):
+        """macOS 的视频目录叫 Movies —— 写死 Videos 的话 Mac 上会一路回落到主目录,
+        下载全散在 ~ 底下 (2026-08-20 修)."""
+        monkeypatch.setattr(config.sys, "platform", "darwin")
+        monkeypatch.setattr(config.Path, "home", staticmethod(lambda: Path("/Users/x")))
+        monkeypatch.setattr(Path, "is_dir", lambda self: True)
+
+        assert config.default_download_dir() == Path("/Users/x/Movies")
+
+    def test_windows_uses_videos(self, monkeypatch):
+        monkeypatch.setattr(config.sys, "platform", "win32")
+        monkeypatch.setattr(config.Path, "home", staticmethod(lambda: Path("/home/x")))
+        monkeypatch.setattr(Path, "is_dir", lambda self: True)
+
+        assert config.default_download_dir() == Path("/home/x/Videos")
+
     def test_defaults_mp4_1080(self, page):
         assert page._radio_mp4.isChecked()
         assert page._video_quality.currentData() == "1080"

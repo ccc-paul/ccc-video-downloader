@@ -56,7 +56,26 @@ infra/  config / local_db / logger / i18n / ffmpeg / jsruntime / desktop
 **不打包 `ffprobe.exe`**（96MB，占原包 24%）：实测 MP4 分离流合并和 MP3 提取都不需要它，
 yt-dlp 只记一条 warning。若哪天某种格式必须要它，spec 里加回一行即可。
 
-**打包实测数据**（2026-08-20 首次真打）：dist 301MB → 安装包 **89MB** → 安装后 306MB。
+**vendor 里的 ffmpeg 必须是静态构建** —— spec 把 vendor 当 `datas` **原样拷贝**，
+不会跟着收依赖库。mac 上 `cp "$(which ffmpeg)" vendor/` 拷来的 Homebrew ffmpeg 只有
+441KB，解码器全在 `/opt/homebrew/Cellar/ffmpeg/*/lib/*.dylib` 里 —— 打出来的包在
+自己机器上（装了 Homebrew）测什么都正常，发给没装的同事就「合并失败」。
+用 <https://github.com/eugeneware/ffmpeg-static/releases> 的 `ffmpeg-darwin-arm64`。
+自检：`otool -L vendor/ffmpeg/ffmpeg` 只出现 `/usr/lib/...` 和 `/System/...` 才算干净
+（Windows 的 essentials 版和两边的 deno 本身就是静态的，没这问题）。
+
+**mac 打包实测**（2026-08-20，macOS 26.5 / Apple Silicon / Python 3.14）：
+`.app` 286MB → `ditto` 压 zip **105MB**。验证过：`frozen=True`、ffmpeg/deno 解析到
+`Contents/Resources/vendor/...`、解压到全新目录能跑、冻结态真实下载走通。
+- **arm64-only**：PyInstaller 不跨架构，Intel Mac 得另打
+- 压包用 `ditto -c -k --sequesterRsrc --keepParent`，不用 `zip` —— bundle 里全是符号链接，
+  `zip` 会展开成实体副本
+- 传 GitHub Releases **资产名用 ASCII**：带中文的名字上传后中文字符会被吃掉，
+  实测变成 `-1.0.0-macOS-arm64.zip`
+- ad-hoc 签名（PyInstaller 自带）过不了 Gatekeeper，`spctl -a -vv` 照样 rejected；
+  同事第一次必须右键 → 打开，或 `xattr -dr com.apple.quarantine`
+
+**Windows 打包实测**（2026-08-20 首次真打）：dist 301MB → 安装包 **89MB** → 安装后 306MB。
 验证过：冻结版双击能启动（`frozen=True`）、ffmpeg 和 deno 都解析到 `_MEIPASS\vendor\...`、
 静默安装到临时目录后能跑、卸载干净无残留。
 

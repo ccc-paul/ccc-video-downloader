@@ -51,7 +51,26 @@ infra/  config / local_db / logger / i18n / ffmpeg / jsruntime / desktop
 - **yt-dlp 要跟紧升级**。升级前先关掉正在运行的应用 —— 它锁着 `yt_dlp/extractor/`，
   uv 会中途失败并把包删残
 
-**vendor 二进制是 gitignore 的**：`ffmpeg.exe` / `deno.exe` 各开发机自备。
+**yt-dlp 是外挂二进制，不是 Python 库**（[ytdlp_bin.py](app/infra/ytdlp_bin.py) +
+[ytdlp_wrapper.py](app/core/ytdlp_wrapper.py)）—— 2026-08-21 改的，起因是全线 403：
+- PyInstaller 把纯 Python 库编译进 exe 内嵌的 PYZ，**没有 site-packages 可 pip 升级，
+  外部副本也抢不过 FrozenImporter** ⇒ 冻死在打包那一刻。而 YouTube 每隔几周换播放器，
+  旧版 yt-dlp 立刻全线 403
+- 改成 `vendor/ytdlp/yt-dlp.exe` + 子进程调用后：能自更新、命令行接口比 Python API 稳、
+  不受本程序 Python 3.11 版本限制
+- 启动时把随包那份**复制到 `%APPDATA%\VideoDownloader\bin\`** 再用 —— 程序可能装在
+  `C:\Program Files\` 下写不动，自更新会失败
+- 后台跑 `--update-to stable`，失败一律不影响使用（`spec` 里已 `excludes=['yt_dlp']`）
+
+**调 yt-dlp 命令行的三个坑**（都实测踩过，别回退）：
+- `--print` 会**同时**隐含 `--simulate` 和 `--quiet` ⇒ 必须补 `--no-simulate --no-quiet`。
+  少了后者的现象很隐蔽：`@@T@@`/`@@F@@` 照常出，唯独一条进度都没有
+- **必须传 `--encoding utf-8`**：否则 yt-dlp 按系统 ANSI 代码页 + `errors='ignore'` 写管道，
+  中文标题被**整段吃掉**（`【包教包会】0基础…` → `03D(1/5)S01E013D`），连带报的文件路径
+  也对不上真实文件。设 `PYTHONIOENCODING` / `PYTHONUTF8` **没用**，冻结版不吃
+- `--newline` 不能少，否则进度是 `\r` 覆盖同一行，没法按行解析
+
+**vendor 二进制是 gitignore 的**：`ffmpeg.exe` / `deno.exe` / `yt-dlp.exe` 各开发机自备。
 `VideoDownloader.spec` 在打包前会断言它们存在，缺了当场报错 —— 不能等装到同事电脑上才发现。
 **不打包 `ffprobe.exe`**（96MB，占原包 24%）：实测 MP4 分离流合并和 MP3 提取都不需要它，
 yt-dlp 只记一条 warning。若哪天某种格式必须要它，spec 里加回一行即可。

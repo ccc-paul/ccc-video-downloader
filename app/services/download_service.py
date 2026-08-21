@@ -4,21 +4,28 @@ DownloadService 全局持有一个; UI 的 DownloaderPage 监听 job_added 信�
 """
 from __future__ import annotations
 
+import subprocess
+import sys
 from dataclasses import replace
 from enum import Enum
 from pathlib import Path
 from uuid import uuid4
 
-import yt_dlp
 from PyQt6.QtCore import QObject, QThread, pyqtSignal
 
 from app.core import ytdlp_wrapper
 from app.core.ytdlp_wrapper import DownloadOptions
+from app.infra import ytdlp_bin
 from app.infra.ffmpeg import ffmpeg_dir
 from app.infra.local_db import connection
 from app.infra.logger import get_logger
 
 log = get_logger("download")
+
+# 无控制台程序里起子进程会闪黑窗口; 每下一个视频闪一次很难看
+_CREATE_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
+
+
 
 
 class JobStatus(Enum):
@@ -55,28 +62,6 @@ def _backoff_for(attempt: int) -> int:
     return _RETRY_BACKOFF_SEC[min(attempt, len(_RETRY_BACKOFF_SEC)) - 1]
 
 
-def _extract_quality(info: dict, format_kind: str) -> str:
-    """从 yt-dlp info 里取**实际**下到的画质: mp4=分辨率 (如 1080p), mp3=码率.
-
-    实际值可能和请求的不同 (YouTube 没有该清晰度时会降档), 所以从下载后的 info 取,
-    而不是回显用户选的。合并格式 (bestvideo+bestaudio) 顶层没 height, 去
-    requested_formats 里找视频流那一路。
-    """
-    if format_kind == "mp3":
-        abr = info.get("abr")
-        return f"{round(abr)} kbps" if abr else ""
-    height = info.get("height")
-    if not height:
-        for f in info.get("requested_formats") or []:
-            if f.get("height"):
-                height = f["height"]
-                break
-    if height:
-        return f"{height}p"
-    res = info.get("resolution")
-    return str(res) if res and res != "audio only" else ""
-
-
 class DownloadJob(QObject):
     """单个下载任务. QObject + 信号; run() 在 worker 线程被调用."""
 
@@ -104,6 +89,7 @@ class DownloadJob(QObject):
         self.attempt = 0          # 已用掉的尝试次数, UI 用来显示 "重试 2/3"
         self.max_attempts = _MAX_ATTEMPTS
         self._cancel_requested = False
+        self._proc: subprocess.Popen | None = None
 
     # ---------- worker entry ----------
 
@@ -158,51 +144,118 @@ class DownloadJob(QObject):
         return self._cancel_requested
 
     def _attempt_once(self) -> None:
-        """跑一次完整的提取 + 下载. 失败直接抛, 由 run() 决定是否重试.
+        """起一个 yt-dlp 子进程跑完整的提取 + 下载. 失败直接抛, 由 run() 决定是否重试.
 
-        **每次都重新 extract_info** —— 403 的成因是拿到的直链本身是坏的, 复用上一轮的
-        info 重下等于拿同一条坏链接再撞一次墙, 必须重新提取换一批链接。
+        **每次都重新起进程重新提取** —— 403 的成因是拿到的直链本身是坏的, 拿上一轮的
+        链接重下等于再撞一次墙, 必须重新提取换一批链接。
+
+        stderr 合并进 stdout 一起按行读: 分开读两个管道要么开线程要么 select,
+        在 Windows 上都很啰嗦, 而且容易在一边写满管道缓冲时死锁。
         """
-        # 注: 状态 RUNNING 由 DownloadService._dispatch 提前设置, 这里不重复.
-        def hook(d: dict) -> None:
-            if self._cancel_requested:
-                raise _CancelledByUser()
-            status = d.get("status")
-            if status == "downloading":
-                downloaded = d.get("downloaded_bytes", 0) or 0
-                total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-                percent = (downloaded / total) if total else 0.0
-                speed = d.get("_speed_str", "") or ""
-                eta = d.get("_eta_str", "") or ""
-                self.progress.emit(percent, speed.strip(), eta.strip())
-            elif status == "finished":
-                self.progress.emit(1.0, "", "")
+        exe = ytdlp_bin.find_ytdlp()
+        if exe is None:
+            raise RuntimeError("未找到 yt-dlp 可执行文件")
 
-        opts = ytdlp_wrapper.build_ydl_opts(self.options, hook)
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(self.url, download=False)
-            # 单视频, 不应当出 entries; 防御性处理
-            if "entries" in info and info["entries"]:
-                info = info["entries"][0]
-            self.title = str(info.get("title") or self.url)
-            self.uploader = str(info.get("uploader") or "")
-            self.duration_sec = int(info.get("duration") or 0)
+        args = [str(exe), *ytdlp_wrapper.build_args(self.options, self.url)]
+        log.debug("启动 yt-dlp: {}", " ".join(args[1:]))
+
+        self._proc = subprocess.Popen(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,                       # 行缓冲, 进度才能实时出来
+            creationflags=_CREATE_NO_WINDOW,  # 免得每次下载闪一个黑窗口
+        )
+
+        last_error = ""
+        try:
+            for raw in self._proc.stdout:            # type: ignore[union-attr]
+                if self._cancel_requested:
+                    raise _CancelledByUser()
+                line = raw.rstrip("\r\n")
+                if not line:
+                    continue
+                err = self._consume_line(line)
+                if err:
+                    last_error = err
+        finally:
+            self._close_process()
+
+        code = self._proc.returncode
+        self._proc = None
+        if code != 0:
+            raise RuntimeError(last_error or f"yt-dlp 退出码 {code}")
+        if self.output_path is None:
+            # 正常路径下 @@F@@ 一定会打出来; 没有说明流程被中途打断了
+            raise RuntimeError(last_error or "yt-dlp 没有报告输出文件")
+
+    def _consume_line(self, line: str) -> str:
+        """认领一行输出. 返回非空字符串表示这是条错误信息."""
+        meta = ytdlp_wrapper.parse_meta(line)
+        if meta:
+            self.title = meta.title or self.url
+            self.uploader = meta.uploader
+            self.duration_sec = meta.duration_sec
             self.status_changed.emit("info_fetched")
+            return ""
 
-            ydl.process_info(info)
-            fn = ydl.prepare_filename(info)
-            # mp3 转换会改后缀
-            if self.options.format_kind == "mp3":
-                fn = str(Path(fn).with_suffix(".mp3"))
-            self.output_path = Path(fn)
-            self.actual_quality = _extract_quality(info, self.options.format_kind)
+        prog = ytdlp_wrapper.parse_progress(line)
+        if prog:
+            self.progress.emit(prog.percent, prog.speed, prog.eta)
+            return ""
+
+        done = ytdlp_wrapper.parse_file(line, self.options.format_kind)
+        if done:
+            self.output_path = done.path
+            self.actual_quality = done.quality
+            self.progress.emit(1.0, "", "")
+            return ""
+
+        # 其余是 yt-dlp 的普通输出/警告/错误 —— 全进日志, 别再吞掉
+        # (当初 no_warnings 吞掉"没有 JS 运行时", 403 查了半天)
+        clean = ytdlp_wrapper.strip_ansi(line)
+        if clean.startswith("ERROR:"):
+            log.error("yt-dlp: {}", clean)
+            return clean.removeprefix("ERROR:").strip()
+        if clean.startswith("WARNING:"):
+            log.warning("yt-dlp: {}", clean)
+            return ""
+        log.debug(clean)
+        return ""
+
+    def _close_process(self) -> None:
+        """收尾子进程: 关管道, 等它退出; 还活着就杀掉 (取消路径)."""
+        proc = self._proc
+        if proc is None:
+            return
+        if proc.stdout:
+            proc.stdout.close()
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=5)
+        else:
+            proc.wait()
 
     # ---------- public API ----------
 
     def cancel(self) -> None:
-        """请求取消. 实际终止由 progress_hook 在下一个 tick 触发."""
+        """请求取消. 读到下一行输出时抛 _CancelledByUser, 随后子进程被 terminate."""
         if self.status in (JobStatus.RUNNING, JobStatus.QUEUED):
             self._cancel_requested = True
+            # 卡在网络等待时可能很久都没有下一行输出, 直接把进程杀了更干脆
+            proc = self._proc
+            if proc is not None and proc.poll() is None:
+                try:
+                    proc.terminate()
+                except OSError as e:
+                    log.warning("终止 yt-dlp 进程失败: {}", e)
 
     # ---------- internal ----------
 

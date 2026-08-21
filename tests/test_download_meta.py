@@ -1,29 +1,11 @@
-"""下载队列新增字段的纯逻辑单测: 实际画质提取 + 文件大小格式化."""
+"""下载队列的文件大小格式化.
+
+实际画质的提取已随 2026-08-21 的 CLI 化改造搬进 ytdlp_wrapper.parse_file,
+对应用例见 test_ytdlp_wrapper.py::TestParseFile。
+"""
 from __future__ import annotations
 
-from app.services.download_service import _extract_quality
 from app.ui.pages.downloader_page import _human_size
-
-
-class TestExtractQuality:
-    def test_mp4_merged_uses_video_stream_height(self):
-        info = {"requested_formats": [{"height": 1080}, {"vcodec": "none", "acodec": "mp4a"}]}
-        assert _extract_quality(info, "mp4") == "1080p"
-
-    def test_mp4_flat_height(self):
-        assert _extract_quality({"height": 720}, "mp4") == "720p"
-
-    def test_mp4_resolution_fallback(self):
-        assert _extract_quality({"resolution": "1280x720"}, "mp4") == "1280x720"
-
-    def test_mp4_audio_only_resolution_ignored(self):
-        assert _extract_quality({"resolution": "audio only"}, "mp4") == ""
-
-    def test_mp3_uses_bitrate(self):
-        assert _extract_quality({"abr": 192.0}, "mp3") == "192 kbps"
-
-    def test_missing_is_empty(self):
-        assert _extract_quality({}, "mp4") == ""
 
 
 class TestHumanSize:

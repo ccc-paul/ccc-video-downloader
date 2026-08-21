@@ -1,19 +1,15 @@
-# 视频下载器 —— 只保留下载这条链路需要的依赖.
+# 视频下载器 —— 运行期只需要这两个 Python 包.
 #
-# 主线 CCC Live Studio 的那些 (pywin32 / comtypes / pyodbc / openai /
-# google-api / faster-whisper / nvidia-cuda / python-pptx / Pillow / keyring)
-# 都随模块一起剥掉了 —— 打包体积从 ~1GB 降到百来 MB, 主要就是省在这里。
+# **yt-dlp 不在这里** —— 它以官方 standalone 二进制的形式外挂在
+# vendor/ytdlp/yt-dlp.exe, 由子进程调用 (见 app/infra/ytdlp_bin.py)。
+#
+# 为什么不当库用: PyInstaller 会把纯 Python 库编译进 exe 内嵌的 PYZ 归档,
+# 既没有 site-packages 可以 pip 升级, 外部副本也抢不过 FrozenImporter ——
+# 等于冻死在打包那一刻。而 YouTube 每隔几周换一次播放器, 旧版 yt-dlp 立刻全线
+# 403 (2026-08-21 就这么翻车过)。外挂二进制则可以自更新, 也不受本程序
+# Python 3.11 的版本限制。
 
 PyQt6>=6.6.0
-
-# ⚠️ yt-dlp 必须跟紧, 而且**每次发版前都要升到最新再打包**。
-# YouTube 每隔几周换一次播放器, 旧版 yt-dlp 立刻全线 403 ——
-# 2026-08-21 就是这么翻车的: 安装包里冻的是 2026.07.04, 用户机器上遇到新播放器
-# 2574220e-main, 三个视频全失败; 升到 2026.08.19 (含 "Player client maintenance")
-# 后同样的视频全部成功。
-# 需要 JS 运行时 (vendor/deno) 才能走完整提取路径, 见 app/infra/jsruntime.py
-yt-dlp>=2026.8.19
-
 loguru>=0.7.0
 
 pyinstaller>=6.0.0          # 仅打包时

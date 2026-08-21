@@ -6,6 +6,7 @@ import sys
 from PyQt6.QtWidgets import QApplication
 
 from app import APP_NAME, __version__
+from app.infra import ytdlp_bin
 from app.infra.ffmpeg import find_ffmpeg
 from app.infra.i18n import init_i18n
 from app.infra.jsruntime import find_js_runtime
@@ -21,9 +22,8 @@ def _log_dependencies(log) -> None:
     2026-08-21 那次排查, 就是靠日志里的播放器版本 (2574220e-main) 对上打包时冻的
     2026.07.04 才确定根因的 —— 当时版本号没记, 绕了不少弯路。
     """
-    import yt_dlp
-
-    log.info("yt-dlp: {}", yt_dlp.version.__version__)
+    ok, detail = ytdlp_bin.probe()
+    log.info("yt-dlp: {}", detail if ok else f"不可用 —— {detail}")
 
     ffmpeg = find_ffmpeg()
     log.info("ffmpeg: {}", ffmpeg or "未找到 (无法合并音视频)")

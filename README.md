@@ -9,7 +9,7 @@
 
 ### Windows
 
-1. 下 `VideoDownloader-Setup-1.0.0.exe`，双击安装（**不需要管理员权限**）
+1. 下最新的 `VideoDownloader-Setup-*.exe`，双击安装（**不需要管理员权限**）
 2. 打开程序，把 YouTube 链接粘进去
 3. 选画质和保存位置，点「加入下载队列」
 
@@ -61,8 +61,15 @@
 
 PyQt6 桌面应用，把 `yt-dlp` 包装成带队列的图形界面。
 
-四层结构：`ui`（界面）→ `services`（队列编排，QThread）→ `core`（yt-dlp 选项组装，
-不依赖 PyQt，可独立测试）→ `infra`（配置 / 日志 / SQLite / 外部可执行文件解析）。
+四层结构：`ui`（界面）→ `services`（队列编排 + 起 yt-dlp 子进程，QThread）→
+`core`（命令行参数组装 + 输出解析，不依赖 PyQt，可独立测试）→
+`infra`（配置 / 日志 / SQLite / 外部可执行文件解析）。
+
+> **yt-dlp 是外挂二进制，不是 Python 依赖。** 打包后 Python 库会被编译进 exe 里，
+> 既不能 pip 升级、外部副本也抢不过 `FrozenImporter`，等于冻死在打包那一刻 ——
+> 而 YouTube 每隔几周换播放器，旧版立刻全线 403。所以改成
+> `vendor/ytdlp/yt-dlp.exe` + 子进程调用，启动时复制到 `%APPDATA%` 下再自更新。
+> 细节见 [CLAUDE.md](CLAUDE.md)。
 
 ### 跑起来
 
@@ -75,8 +82,13 @@ uv pip install --python .venv\Scripts\python.exe -r requirements.txt
 
 | 放哪 | 干什么 | 缺了会怎样 |
 |---|---|---|
+| `vendor/ytdlp/yt-dlp`（Windows 是 `yt-dlp.exe`） | 下载引擎本体 | 什么都下不了 |
 | `vendor/ffmpeg/ffmpeg`（Windows 是 `ffmpeg.exe`） | 合并音视频流 | 1080p 这类分离流下不了 |
 | `vendor/deno/deno`（Windows 是 `deno.exe`） | 算 YouTube 的 nsig 签名挑战 | **下载报 HTTP 403** |
+
+yt-dlp 从 <https://github.com/yt-dlp/yt-dlp/releases/latest> 取对应平台的 standalone
+可执行文件（Windows 是 `yt-dlp.exe`，约 17MB）。它只是**基线版本** ——
+程序启动后会复制到 `%APPDATA%` 并自更新，所以随包这份不必总是最新。
 
 Windows：deno 从 <https://github.com/denoland/deno/releases> 下
 `deno-x86_64-pc-windows-msvc.zip`，ffmpeg 用 essentials 版即可（那是静态的）。

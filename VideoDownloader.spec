@@ -45,7 +45,7 @@ datas = [
 # 可执行文件名按平台取: Windows 带 .exe, mac/Linux 不带 —— 与
 # app/infra/ffmpeg.py、jsruntime.py 的解析逻辑保持一致。
 _EXE = ".exe" if sys.platform == "win32" else ""
-for rel in (f"ffmpeg/ffmpeg{_EXE}", f"deno/deno{_EXE}"):
+for rel in (f"ffmpeg/ffmpeg{_EXE}", f"deno/deno{_EXE}", f"ytdlp/yt-dlp{_EXE}"):
     src = _VENDOR / rel
     if not src.is_file():
         raise SystemExit(
@@ -73,6 +73,9 @@ a = Analysis(
         "openai", "googleapiclient", "google_auth_oauthlib",
         "faster_whisper", "ctranslate2", "av", "torch",
         "pptx", "docx",
+        # yt-dlp 现在以 vendor/ytdlp/yt-dlp.exe 的形式外挂调用, 不再作为库打进来。
+        # 打进来的话就冻死在 exe 里没法更新 —— 那正是 2026-08-21 全线 403 的成因。
+        "yt_dlp",
     ],
     noarchive=False,
 )

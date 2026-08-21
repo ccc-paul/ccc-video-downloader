@@ -67,42 +67,5 @@ class TestJsRuntimesOpt:
         assert jsruntime.js_runtimes_opt() == {"deno": {"path": r"C:\v\deno.exe"}}
 
 
-class TestBuildYdlOpts:
-    def test_wires_js_runtime_and_ejs(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(
-            ytdlp_wrapper.jsruntime, "js_runtimes_opt",
-            lambda: {"deno": {"path": r"C:\v\deno.exe"}})
-
-        opts = ytdlp_wrapper.build_ydl_opts(opts_for(tmp_path), noop_hook)
-
-        assert opts["js_runtimes"] == {"deno": {"path": r"C:\v\deno.exe"}}
-        # 光有运行时不够, 还要允许拉 EJS 求解脚本, 否则 n challenge 解不开
-        assert opts["remote_components"] == ["ejs:github"]
-
-    def test_omits_keys_when_no_runtime(self, tmp_path, monkeypatch):
-        """找不到运行时就**不传** key, 让 yt-dlp 走自己的默认;
-        传空 dict 会把默认的 deno 也关掉, 更糟。"""
-        monkeypatch.setattr(ytdlp_wrapper.jsruntime, "js_runtimes_opt", lambda: None)
-
-        opts = ytdlp_wrapper.build_ydl_opts(opts_for(tmp_path), noop_hook)
-
-        assert "js_runtimes" not in opts
-        assert "remote_components" not in opts
-
-    def test_warnings_not_silenced(self, tmp_path):
-        """no_warnings 会把 '没有 JS 运行时' 这类关键线索吞掉 —— 不许再设."""
-        opts = ytdlp_wrapper.build_ydl_opts(opts_for(tmp_path), noop_hook)
-        assert not opts.get("no_warnings")
-        assert opts.get("logger") is not None
-
-    def test_logger_has_ytdlp_required_methods(self, tmp_path):
-        logger = ytdlp_wrapper.build_ydl_opts(opts_for(tmp_path), noop_hook)["logger"]
-        for method in ("debug", "warning", "error"):
-            assert callable(getattr(logger, method))
-
-    def test_logger_survives_braces(self, tmp_path):
-        """yt-dlp 的消息里可能带 {} (URL/JSON), loguru 的 format 会当占位符炸掉."""
-        logger = ytdlp_wrapper.build_ydl_opts(opts_for(tmp_path), noop_hook)["logger"]
-        logger.warning("nsig extraction failed: {'n': 'abc'} {0}")
-        logger.error("HTTP Error 403: Forbidden {")
-        logger.debug("[debug] fmt {x}")
+# 注: 「JS 运行时是否接进了 yt-dlp 调用」的用例, 随 2026-08-21 的 CLI 化改造
+# 搬到了 test_ytdlp_wrapper.py::TestBuildArgs (现在验的是命令行参数而不是 dict)。

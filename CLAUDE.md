@@ -72,8 +72,11 @@ yt-dlp 只记一条 warning。若哪天某种格式必须要它，spec 里加回
   `zip` 会展开成实体副本
 - 传 GitHub Releases **资产名用 ASCII**：带中文的名字上传后中文字符会被吃掉，
   实测变成 `-1.0.0-macOS-arm64.zip`
-- ad-hoc 签名（PyInstaller 自带）过不了 Gatekeeper，`spctl -a -vv` 照样 rejected；
-  同事第一次必须右键 → 打开，或 `xattr -dr com.apple.quarantine`
+- ad-hoc 签名（PyInstaller 自带）过不了 Gatekeeper，`spctl -a -vv` 照样 rejected。
+  **macOS 15 起「右键 → 打开」这条绕过路径被苹果取消了**（2026-08-20 在 26.5 上确认：
+  弹窗只有 Move to Trash / Done）—— 交付说明里只能给
+  `xattr -dr com.apple.quarantine /Applications/视频下载器.app`，
+  或「系统设置 → 隐私与安全性 → 仍要打开」。没买 99 美元/年的开发者账号就省不掉这步
 
 **Windows 打包实测**（2026-08-20 首次真打）：dist 301MB → 安装包 **89MB** → 安装后 306MB。
 验证过：冻结版双击能启动（`frozen=True`）、ffmpeg 和 deno 都解析到 `_MEIPASS\vendor\...`、

@@ -16,12 +16,28 @@
 ### macOS（Apple Silicon）
 
 1. 下 `VideoDownloader-1.0.0-macOS-arm64.zip`，双击解压
-2. 把 `视频下载器.app` 拖进「应用程序」
-3. **第一次必须右键 → 打开**，在弹出的对话框里再点一次「打开」
+2. 把 `视频下载器.app` 拖进「应用程序」——
+   **别留在「下载」文件夹里直接跑**，macOS 会把它挪到一个随机只读临时目录执行
+3. 打开「终端」（聚焦搜索 `Terminal`），粘这一行回车，只需做这一次：
 
-> 直接双击会被 Gatekeeper 拦（「无法打开，因为无法验证开发者」）—— 这个包没有 Apple
-> 签名和公证。右键 → 打开只需做一次，之后双击就行。命令行等价做法：
-> `xattr -dr com.apple.quarantine /Applications/视频下载器.app`
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/视频下载器.app
+   ```
+
+4. 之后双击就能开
+
+> **为什么要第 3 步**：这个包没有 Apple 签名和公证，直接双击会被 Gatekeeper 拦下 ——
+> 弹窗写「Apple 无法验证"视频下载器"是否包含恶意软件」，只给 **Move to Trash / Done**
+> 两个按钮。点 **Done**，**别点 Move to Trash**。
+>
+> ⚠️ **macOS 15 起「右键 → 打开」这条老路已经失效了**，网上大部分教程还停在那儿，别试。
+>
+> 不想用终端的话还有一条路：先双击一次让它被拒（点 Done），然后「系统设置」→
+> 「隐私与安全性」→ 往下滚到「安全性」，会多出一行「已阻止使用"视频下载器"…」→
+> 点「仍要打开」→ Touch ID / 密码 → 再双击一次。这个按钮只在**失败尝试之后**才出现。
+>
+> 想让同事双击直接就能开，唯一的正规解法是加入 Apple Developer Program
+> （99 美元/年）做签名 + 公证 —— 目前**没买**，所以上面这一步省不掉。
 >
 > **只支持 Apple Silicon（M1 及以后）**。Intel Mac 打不开，得在 Intel 机器上自行构建，
 > 见 [在 Mac 上构建](#在-mac-上构建)。
@@ -138,12 +154,23 @@ ditto -c -k --sequesterRsrc --keepParent "视频下载器.app" "VideoDownloader-
 另外传 GitHub Releases 时**文件名用 ASCII** —— 带中文的资产名会被 GitHub 把中文字符
 直接吃掉，变成 `-1.0.0-macOS-arm64.zip`。
 
-**Gatekeeper**：没有 Apple 开发者签名和公证的话，别人下载后双击会被拦
-（「无法打开，因为无法验证开发者」）。让对方**右键 → 打开**，或执行
-`xattr -dr com.apple.quarantine 视频下载器.app`。这比 Windows 的 SmartScreen 更严格，
-正规解法是加入 Apple Developer Program（99 美元/年）做签名+公证。
+**Gatekeeper**：没有 Apple 开发者签名和公证的话，别人下载后双击一定被拦。
 PyInstaller 会给 bundle 打一个 ad-hoc 签名（`codesign --verify --deep --strict` 能过），
-但 ad-hoc 不解决 Gatekeeper —— `spctl -a -vv` 照样 rejected。
+但 ad-hoc 对 Gatekeeper 不算数 —— `spctl -a -vv` 照样 `rejected`。
+
+**别再写「右键 → 打开」了** —— macOS 15 起苹果**取消了这条绕过路径**：现在弹的是
+「Apple 无法验证…」，只有 Move to Trash / Done 两个按钮，右键菜单里的「打开」不再有
+豁免效果（2026-08-20 在 macOS 26.5 上确认）。现在能用的只有两条：
+
+```bash
+xattr -dr com.apple.quarantine /Applications/视频下载器.app   # 推荐, 复制粘贴一行
+```
+
+或者让对方双击被拒后去「系统设置」→「隐私与安全性」→「安全性」里点「仍要打开」
+（那个按钮只在失败尝试之后才出现）。
+
+这比 Windows 的 SmartScreen 严格得多。正规解法是加入 Apple Developer Program
+（99 美元/年）做签名 + 公证 —— **目前没买**，交付时必须把上面那行命令一起发给对方。
 
 **实测产物**（2026-08-20，macOS 26.5 / Apple Silicon / Python 3.14）：
 

@@ -215,7 +215,7 @@ xattr -dr com.apple.quarantine /Applications/视频下载器.app   # 推荐, 复
 ```powershell
 .\.venv\Scripts\python.exe -m pytest tests\ -q      # 单测
 .\.venv\Scripts\python.exe -m tests.smoke           # 起窗口 1.5s 自动退出
-.\.venv\Scripts\python.exe -m tests.e2e_download    # 真实下载一个 19s 的视频
+.\.venv\Scripts\python.exe -m tests.e2e_download    # 真实下载 (mp4 + mp3 各一趟)
 ```
 
 mac 上换成 `.venv/bin/python`，其余一样。

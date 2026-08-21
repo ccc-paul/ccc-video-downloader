@@ -261,6 +261,8 @@ class DownloadService(QObject):
             log.warning("任务状态为 {}, 不可重试: {}", job.status.value, job.url)
             return None
 
+        self._clear_partial_files_impl(job)
+
         new_job = DownloadJob(job.url, job.options)
         self._jobs.append(new_job)
         new_job.finished.connect(self._on_job_finished)
@@ -319,6 +321,34 @@ class DownloadService(QObject):
             self._running.remove(job)
         self._record_history(job)
         self._dispatch()
+
+    @staticmethod
+    def _clear_partial_files_impl(job: DownloadJob) -> int:
+        """删掉这个任务留下的 .part / .ytdl 残片, 返回删除个数.
+
+        为什么手动重试要清干净 (2026-08-21 日志实证): 失败会留下 `xxx.f399.mp4.part`,
+        下次 yt-dlp 看到它就 `Resuming download at byte N` 走续传 —— 而续传是拿
+        **已经失效的旧 URL** 发 Range 请求, 注定继续 403。日志里那条
+        `Resuming download at byte 10006747` 反复出现, 就是这么卡死的。
+
+        自动重试不清 (那是同一次会话内的正常续传, 有价值); 只有用户点了「重试」
+        才当作"从头再来"。
+        """
+        removed = 0
+        out_dir = job.options.output_dir
+        if not out_dir or not out_dir.is_dir():
+            return 0
+        # 文件名由 yt-dlp 按标题生成, 这里拿不到确切名字, 只能按扩展名扫目录.
+        # 只删残片, 不碰任何完整文件。
+        for pattern in ("*.part", "*.ytdl"):
+            for leftover in out_dir.glob(pattern):
+                try:
+                    leftover.unlink()
+                    removed += 1
+                    log.info("重试前清掉残片: {}", leftover.name)
+                except OSError as e:
+                    log.warning("残片删不掉 {}: {}", leftover.name, e)
+        return removed
 
     def _on_thread_finished(self) -> None:
         """线程真正结束后从追踪表摘除 (主线程 queued). deleteLater 另行释放 C++ 对象."""

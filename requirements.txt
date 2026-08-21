@@ -6,10 +6,13 @@
 
 PyQt6>=6.6.0
 
-# yt-dlp 要跟紧: YouTube 改签名算法后旧版会 403.
-# 2026.07.04 起需要 JS 运行时 (vendor/deno) 才能走完整提取路径,
-# 见 app/infra/jsruntime.py
-yt-dlp>=2026.7.4
+# ⚠️ yt-dlp 必须跟紧, 而且**每次发版前都要升到最新再打包**。
+# YouTube 每隔几周换一次播放器, 旧版 yt-dlp 立刻全线 403 ——
+# 2026-08-21 就是这么翻车的: 安装包里冻的是 2026.07.04, 用户机器上遇到新播放器
+# 2574220e-main, 三个视频全失败; 升到 2026.08.19 (含 "Player client maintenance")
+# 后同样的视频全部成功。
+# 需要 JS 运行时 (vendor/deno) 才能走完整提取路径, 见 app/infra/jsruntime.py
+yt-dlp>=2026.8.19
 
 loguru>=0.7.0
 

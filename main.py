@@ -15,11 +15,16 @@ from app.ui.main_window import MainWindow
 
 
 def _log_dependencies(log) -> None:
-    """把两个外部可执行文件的解析结果记进日志.
+    """把依赖状况记进日志, 用户报"下载失败"时头几行就能定位.
 
-    同事报"下载失败"时, 让他把日志发来 —— 头两行就能看出是不是缺 ffmpeg/deno,
-    省掉一轮来回。打包后也能借此确认 vendor 真的进了 _MEIPASS。
+    **yt-dlp 版本尤其要记**: YouTube 每隔几周换播放器, 旧版 yt-dlp 会全线 403。
+    2026-08-21 那次排查, 就是靠日志里的播放器版本 (2574220e-main) 对上打包时冻的
+    2026.07.04 才确定根因的 —— 当时版本号没记, 绕了不少弯路。
     """
+    import yt_dlp
+
+    log.info("yt-dlp: {}", yt_dlp.version.__version__)
+
     ffmpeg = find_ffmpeg()
     log.info("ffmpeg: {}", ffmpeg or "未找到 (无法合并音视频)")
 

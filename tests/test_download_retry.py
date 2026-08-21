@@ -95,6 +95,58 @@ class TestRetryJob:
         assert third is not None and third is not second
 
 
+class TestPartialCleanup:
+    """手动重试前要清掉 .part 残片 (2026-08-21 日志实证).
+
+    失败会留下 xxx.f399.mp4.part, yt-dlp 下次看到它就走续传 —— 而续传是拿
+    **已失效的旧 URL** 发 Range 请求, 注定继续 403。日志里那条
+    "Resuming download at byte 10006747" 反复出现就是这么卡死的。
+    """
+
+    def test_removes_part_files(self, service, tmp_path):
+        (tmp_path / "video.f399.mp4.part").write_bytes(b"x" * 100)
+        (tmp_path / "video.f140.m4a.part").write_bytes(b"x" * 50)
+        job = make_job(tmp=tmp_path)
+        job._set_status(JobStatus.ERROR)
+        service._jobs.append(job)
+
+        service.retry_job(job)
+
+        assert not list(tmp_path.glob("*.part")), "残片没清掉, 重试会继续续传旧 URL"
+
+    def test_removes_ytdl_state_files(self, service, tmp_path):
+        (tmp_path / "video.f399.mp4.ytdl").write_text("{}")
+        job = make_job(tmp=tmp_path)
+        job._set_status(JobStatus.ERROR)
+        service._jobs.append(job)
+
+        service.retry_job(job)
+
+        assert not list(tmp_path.glob("*.ytdl"))
+
+    def test_keeps_completed_files(self, service, tmp_path):
+        """只删残片, 已下好的完整文件一个都不能碰."""
+        keep = tmp_path / "已经下好的视频.mp4"
+        keep.write_bytes(b"complete")
+        (tmp_path / "half.mp4.part").write_bytes(b"partial")
+        job = make_job(tmp=tmp_path)
+        job._set_status(JobStatus.ERROR)
+        service._jobs.append(job)
+
+        service.retry_job(job)
+
+        assert keep.exists() and keep.read_bytes() == b"complete"
+
+    def test_missing_dir_does_not_raise(self, service, tmp_path):
+        """输出目录被删了也不能让重试崩掉."""
+        gone = tmp_path / "已经不存在"
+        job = make_job(tmp=gone)
+        job._set_status(JobStatus.ERROR)
+        service._jobs.append(job)
+
+        assert service.retry_job(job) is not None
+
+
 class TestRowRebind:
     """UI 行重试后改盯新 job, 且不再受旧 job 信号影响."""
 

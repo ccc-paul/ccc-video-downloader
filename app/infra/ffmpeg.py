@@ -9,6 +9,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from app.infra.probe import run_version
+
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _EXE_NAME = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
 _VENDOR_EXE = _PROJECT_ROOT / "vendor" / "ffmpeg" / _EXE_NAME
@@ -30,5 +32,16 @@ def ffmpeg_dir() -> Path | None:
     return exe.parent if exe else None
 
 
+def probe() -> tuple[bool, str]:
+    """真的跑一下 ffmpeg, 返回 (可用, 版本串或失败原因). 同 jsruntime.probe 的道理:
+    文件存在不代表能执行 (杀毒拦截 / 缺运行库 / 文件损坏)."""
+    exe = find_ffmpeg()
+    if exe is None:
+        return False, "未找到"
+    ok, detail = run_version(exe, "-version")
+    return ok, (detail if ok else f"{exe} — {detail}")
+
+
 def is_available() -> bool:
-    return find_ffmpeg() is not None
+    """能否真正用于合并音视频 (跑得起来才算)."""
+    return probe()[0]

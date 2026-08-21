@@ -8,7 +8,7 @@
 ; 配置/历史/日志写在 %APPDATA%\VideoDownloader, 与安装目录无关, 卸载不会误删。
 
 #define MyAppName "视频下载器"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.0.1"
 #define MyAppExeName "VideoDownloader.exe"
 
 [Setup]

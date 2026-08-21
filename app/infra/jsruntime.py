@@ -21,6 +21,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from app.infra.probe import run_version
+
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # yt-dlp 支持的运行时, 按它自己的优先级排 (高 → 低)
@@ -50,8 +52,23 @@ def find_js_runtime() -> tuple[str, Path] | None:
     return None
 
 
+def probe() -> tuple[bool, str]:
+    """真的跑一下运行时, 返回 (可用, 版本串或失败原因).
+
+    **不要用"文件存在"当可用性判据** —— deno 是个 93MB 的无签名二进制, 很容易
+    被杀毒软件拦住执行; 那时文件在、状态灯亮, 但下载全部 403 (2026-08 实际事故)。
+    """
+    found = find_js_runtime()
+    if found is None:
+        return False, "未找到 (deno / node / bun 都没有)"
+    name, exe = found
+    ok, detail = run_version(exe, "--version")
+    return ok, (f"{name} {detail}" if ok else f"{name} @ {exe} — {detail}")
+
+
 def is_available() -> bool:
-    return find_js_runtime() is not None
+    """能否真正用于解签名挑战 (跑得起来才算)."""
+    return probe()[0]
 
 
 def js_runtimes_opt() -> dict | None:

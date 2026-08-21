@@ -53,6 +53,7 @@ STRINGS: Final[dict[str, dict[str, str]]] = {
         # ---- 本分支新增 ----
         "downloader.error.no_dir": "请先选择保存位置",
         "downloader.error.bad_dir": "无法使用这个保存位置:\n{dir}\n\n{err}",
+        "status.ytdlp.checking": "yt-dlp 检测中…",
         "status.ffmpeg": "ffmpeg",
         "status.jsruntime": "JS 运行时",
     },
@@ -94,6 +95,7 @@ STRINGS: Final[dict[str, dict[str, str]]] = {
         # ---- 本分支新增 ----
         "downloader.error.no_dir": "Choose a save location first",
         "downloader.error.bad_dir": "Cannot use this save location:\n{dir}\n\n{err}",
+        "status.ytdlp.checking": "checking yt-dlp…",
         "status.ffmpeg": "ffmpeg",
         "status.jsruntime": "JS runtime",
     },

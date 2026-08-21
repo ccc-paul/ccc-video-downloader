@@ -22,8 +22,10 @@ def _log_dependencies(log) -> None:
     2026-08-21 那次排查, 就是靠日志里的播放器版本 (2574220e-main) 对上打包时冻的
     2026.07.04 才确定根因的 —— 当时版本号没记, 绕了不少弯路。
     """
-    ok, detail = ytdlp_bin.probe()
-    log.info("yt-dlp: {}", detail if ok else f"不可用 —— {detail}")
+    # 这里只记路径, **不跑 --version**: mac 上官方 yt-dlp 是 PyInstaller onefile,
+    # 每次执行都重新解包, 单次 8~12s —— 放在窗口出现之前会让程序看起来卡死。
+    # 版本号由主窗口的后台线程探完再补记一行 (见 main_window._UpdateWorker)。
+    log.info("yt-dlp: {}", ytdlp_bin.find_ytdlp() or "未找到 (什么都下不了)")
 
     ffmpeg = find_ffmpeg()
     log.info("ffmpeg: {}", ffmpeg or "未找到 (无法合并音视频)")

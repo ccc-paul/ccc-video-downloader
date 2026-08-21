@@ -84,12 +84,29 @@ def find_ytdlp() -> Path | None:
     return Path(found) if found else None
 
 
-def probe() -> tuple[bool, str]:
+# mac 上官方发布的 yt-dlp 是 PyInstaller **onefile**: 每次执行都要把 ~37MB 解到
+# 临时目录再跑, 实测 `--version` 单次要 8~12s (同一台机器 deno 0.05s / ffmpeg 0.01s
+# —— 静态二进制没这个开销)。默认 8s 超时在 mac 上必然误报"不可用", 所以放宽。
+# Windows 的 yt-dlp.exe 同样是 onefile, 但实测快得多, 沿用默认值。
+_PROBE_TIMEOUT = 30.0 if sys.platform == "darwin" else 8.0
+
+# probe 结果缓存: 启动时日志和状态栏都要问版本, mac 上问一次就是 8~12s,
+# 问两次等于白等一倍。自更新完成后用 refresh=True 拿新版本号。
+_probe_cache: tuple[bool, str] | None = None
+
+
+def probe(refresh: bool = False) -> tuple[bool, str]:
     """跑一下拿版本号. 文件存在不代表能执行 (杀毒拦截 / 文件损坏)."""
+    global _probe_cache
+    if _probe_cache is not None and not refresh:
+        return _probe_cache
+
     exe = find_ytdlp()
     if exe is None:
-        return False, "未找到 yt-dlp"
-    return run_version(exe, "--version")
+        _probe_cache = (False, "未找到 yt-dlp")
+    else:
+        _probe_cache = run_version(exe, "--version", timeout=_PROBE_TIMEOUT)
+    return _probe_cache
 
 
 def is_available() -> bool:
@@ -110,12 +127,15 @@ def self_update(timeout: float = 120.0) -> tuple[bool, str]:
     if exe is None:
         return False, "未找到 yt-dlp, 跳过更新"
 
-    before = run_version(exe, "--version")[1]
+    # before 走缓存: 启动时刚探过一次, mac 上再问一次又是 8~12s
+    before = probe()[1]
     ok, detail = run_version(exe, "--update-to", "stable", timeout=timeout)
     if not ok:
         return False, f"更新失败 (不影响使用): {detail}"
 
-    after = run_version(exe, "--version")[1]
+    global _probe_cache
+    _probe_cache = run_version(exe, "--version", timeout=_PROBE_TIMEOUT)
+    after = _probe_cache[1]
     if after and after != before:
         return True, f"yt-dlp 已更新: {before} → {after}"
     return False, f"yt-dlp 已是最新 ({after or before})"

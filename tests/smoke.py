@@ -25,7 +25,11 @@ def main() -> int:
     window = MainWindow()
     window.show()
 
-    QTimer.singleShot(1500, qt_app.quit)
+    # 先真·关窗再退出: 直接 qt_app.quit() 会**绕过 closeEvent**, 收尾逻辑
+    # (停下载线程、掐掉自更新子进程) 一条都测不到 —— 而恰恰是那里出过
+    # "QThread: Destroyed while thread is still running" 的退出崩溃。
+    QTimer.singleShot(1500, window.close)
+    QTimer.singleShot(2500, qt_app.quit)
     exit_code = qt_app.exec()
     log.info("冒烟测试结束 code={}", exit_code)
     return exit_code

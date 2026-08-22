@@ -96,9 +96,23 @@ class MainWindow(QMainWindow):
         self._update_worker.probed.connect(self._on_ytdlp_probed)
         self._update_worker.done.connect(self._on_update_done)
         self._update_worker.done.connect(self._update_thread.quit)
+        # 清引用要接在 deleteLater 前面 —— 两条都是排队送回主线程, 按连接顺序执行
+        self._update_thread.finished.connect(self._forget_update_thread)
         self._update_thread.finished.connect(self._update_thread.deleteLater)
         self._update_thread.finished.connect(self._update_worker.deleteLater)
         self._update_thread.start()
+
+    def _forget_update_thread(self) -> None:
+        """线程跑完就把引用清掉 —— 下面 deleteLater 一执行, C++ 对象就没了。
+
+        不清的后果是关窗必崩: closeEvent 里 `thread.isRunning()` 访问的是已析构的
+        QThread, 抛 `RuntimeError: wrapped C/C++ object of type QThread has been
+        deleted`; **PyQt6 对虚函数里未捕获的 Python 异常直接 abort**
+        (Windows 退出码 0xC0000409), super().closeEvent() 连跑都跑不到。
+        触发条件很日常: 开着程序超过自更新那几秒再关窗就中。
+        """
+        self._update_thread = None
+        self._update_worker = None
 
     def _on_update_done(self, changed: bool, message: str) -> None:
         self._log.info("{}", message)
@@ -136,8 +150,15 @@ class MainWindow(QMainWindow):
             probe.kill_running()
         except Exception as e:  # noqa: BLE001 — 关窗路径不能因收尾失败而卡住
             self._log.warning("停止更新子进程失败: {}", e)
+        # isRunning() 也要护住: 正常情况下 _forget_update_thread 已经把引用清成
+        # None, 但 deleteLater 是异步的, 关窗路径上任何一个异常都会让 PyQt6 abort,
+        # 不值得赌顺序。
         thread = getattr(self, "_update_thread", None)
-        if thread is not None and thread.isRunning():
+        try:
+            running = thread is not None and thread.isRunning()
+        except RuntimeError:  # C++ 对象已析构
+            running = False
+        if running:
             thread.quit()
             if not thread.wait(3000):
                 self._log.warning("更新线程未在 3s 内退出")

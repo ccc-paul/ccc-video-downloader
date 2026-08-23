@@ -6,11 +6,12 @@
 hiddenimports 和 collect_all, 体积从 ~1GB 降到百来 MB。
 
 关键点:
-- vendor 里的两个可执行文件**必须打进去**, 否则同事那边一用就出事:
+- vendor 里的三个可执行文件**必须打进去**, 否则同事那边一用就出事:
+    yt-dlp  缺了 → 下载引擎本体没了, 什么都下不了
     ffmpeg  缺了 → 1080p 这类分离流无法合并音视频
     deno    缺了 → YouTube 签名挑战算不出来, 直接 HTTP 403
-  两者都按项目相对结构放进 _MEIPASS, 让 ffmpeg.py / jsruntime.py 里
-  Path(__file__).parent... 的定位逻辑在冻结后依然成立 (无需改代码)。
+  三个都按项目相对结构放进 _MEIPASS, 让 ytdlp_bin.py / ffmpeg.py / jsruntime.py
+  里 Path(__file__).parent... 的定位逻辑在冻结后依然成立 (无需改代码)。
 - QSS 引用的图标要一起带上, 否则 checkbox 没方框、下拉框没箭头。
 
 调试期把 CONSOLE 设 True 能看到导入错误; 交付时设 False。
@@ -45,15 +46,62 @@ datas = [
 # 可执行文件名按平台取: Windows 带 .exe, mac/Linux 不带 —— 与
 # app/infra/ffmpeg.py、jsruntime.py 的解析逻辑保持一致。
 _EXE = ".exe" if sys.platform == "win32" else ""
-for rel in (f"ffmpeg/ffmpeg{_EXE}", f"deno/deno{_EXE}", f"ytdlp/yt-dlp{_EXE}"):
+
+# 每个文件配一句"从哪儿弄" —— 撞上断言的人多半正是不知道该放什么进去,
+# 只报"缺文件"等于让他去猜 (别再笼统说 brew: brew 装不出 yt-dlp 的 standalone)。
+_WHERE = {
+    "ytdlp": (
+        "yt-dlp: https://github.com/yt-dlp/yt-dlp/releases/latest\n"
+        + (
+            "  取 yt-dlp.exe (17MB), 放成 vendor/ytdlp/yt-dlp.exe"
+            if sys.platform == "win32"
+            else "  取 **yt-dlp_macos** (35MB, Mach-O), 改名放成 vendor/ytdlp/yt-dlp 并 chmod +x\n"
+            "  ⚠️ 别下那个名字刚好叫 `yt-dlp` 的 (3MB): 它是 python3 脚本, "
+            "开发机有 Python 跑得通, 装到没 Python 的用户机上直接废"
+        )
+    ),
+    "ffmpeg": (
+        "ffmpeg: 必须是**静态构建**\n"
+        + (
+            "  https://www.gyan.dev/ffmpeg/builds/ 的 essentials 版"
+            if sys.platform == "win32"
+            else "  https://github.com/eugeneware/ffmpeg-static/releases 的 ffmpeg-darwin-arm64\n"
+            "  ⚠️ 别用 `brew install` 那个: 它只有 441KB, 解码器都在 Cellar 的 dylib 里, "
+            "打出来的包只在装了 Homebrew 的机器上能用"
+        )
+    ),
+    "deno": (
+        "deno: https://github.com/denoland/deno/releases\n"
+        + (
+            "  取 deno-x86_64-pc-windows-msvc.zip"
+            if sys.platform == "win32"
+            else "  `brew install deno` 后 cp \"$(which deno)\" vendor/deno/ 即可 (它是静态的)"
+        )
+    ),
+}
+
+for rel in (f"ytdlp/yt-dlp{_EXE}", f"ffmpeg/ffmpeg{_EXE}", f"deno/deno{_EXE}"):
+    name = Path(rel).parent.name
     src = _VENDOR / rel
     if not src.is_file():
         raise SystemExit(
             f"打包中止: 缺少 {src}\n"
-            "vendor/ 是 gitignore 的, 请先把 ffmpeg 和 deno 放进去再打包。\n"
-            "mac 上可以 `brew install ffmpeg deno` 后把二进制拷进 vendor/, "
-            "或直接依赖 PATH (那样就别打包 vendor, 但用户机器上必须装好)。"
+            f"vendor/ 是 gitignore 的, 各开发机自备。这个文件的来源:\n\n"
+            f"{_WHERE[name]}\n"
         )
+
+    # 名字对不代表东西对: yt-dlp 的 release 里那个 3MB 的 `yt-dlp` 是 python3 脚本,
+    # 文件名跟 mac/Linux 要的一模一样, 开发机上 `--version` 还照常输出 (因为开发机
+    # 有 Python) —— 一路顺畅到装进用户电脑才发现废了。这里当场拦下。
+    if sys.platform != "win32":
+        with open(src, "rb") as fh:
+            if fh.read(2) == b"#!":
+                raise SystemExit(
+                    f"打包中止: {src} 是脚本不是可执行文件\n"
+                    f"(开头是 #!, 多半下成了那个 3MB 的 python3 版)\n\n"
+                    f"{_WHERE[name]}\n"
+                )
+
     datas.append((str(src), f"vendor/{Path(rel).parent}"))
 
 a = Analysis(

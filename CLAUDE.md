@@ -70,8 +70,16 @@ infra/  config / local_db / logger / i18n / ffmpeg / jsruntime / desktop
   也对不上真实文件。设 `PYTHONIOENCODING` / `PYTHONUTF8` **没用**，冻结版不吃
 - `--newline` 不能少，否则进度是 `\r` 覆盖同一行，没法按行解析
 
-**vendor 二进制是 gitignore 的**：`ffmpeg.exe` / `deno.exe` / `yt-dlp.exe` 各开发机自备。
-`VideoDownloader.spec` 在打包前会断言它们存在，缺了当场报错 —— 不能等装到同事电脑上才发现。
+**vendor 二进制是 gitignore 的**：`ffmpeg` / `deno` / `yt-dlp` 三个各开发机自备。
+`VideoDownloader.spec` 在打包前会断言它们存在，并把「当前平台该下哪个资产」写进报错里
+—— 不能等装到同事电脑上才发现。
+
+**mac 上的 yt-dlp 要下 `yt-dlp_macos` 再改名**，不是 release 里那个名字刚好叫 `yt-dlp`
+的（3MB）——后者是 `#!/usr/bin/env python3` 脚本。这个坑 mac 上几乎必踩：文件名天然
+就对、不用改名，**开发机上 `--version` 还照常输出**（开发机有 python3），一路顺畅到装进
+没 Python 的同事电脑才发现废了。Windows 不会中招（要的是 `yt-dlp.exe`，名字对不上）。
+spec 里已加护栏：非 Windows 平台检查文件开头是不是 `#!`，是就当场中止。
+
 **不打包 `ffprobe.exe`**（96MB，占原包 24%）：实测 MP4 分离流合并和 MP3 提取都不需要它，
 yt-dlp 只记一条 warning。若哪天某种格式必须要它，spec 里加回一行即可。
 

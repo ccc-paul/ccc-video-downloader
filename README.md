@@ -78,7 +78,7 @@ uv pip install --python .venv\Scripts\python.exe -r requirements.txt
 .\.venv\Scripts\python.exe main.py
 ```
 
-**两个必须自备的二进制**（`vendor/` 已 gitignore，各开发机自己放）：
+**三个必须自备的二进制**（`vendor/` 已 gitignore，各开发机自己放）：
 
 | 放哪 | 干什么 | 缺了会怎样 |
 |---|---|---|
@@ -86,9 +86,21 @@ uv pip install --python .venv\Scripts\python.exe -r requirements.txt
 | `vendor/ffmpeg/ffmpeg`（Windows 是 `ffmpeg.exe`） | 合并音视频流 | 1080p 这类分离流下不了 |
 | `vendor/deno/deno`（Windows 是 `deno.exe`） | 算 YouTube 的 nsig 签名挑战 | **下载报 HTTP 403** |
 
-yt-dlp 从 <https://github.com/yt-dlp/yt-dlp/releases/latest> 取对应平台的 standalone
-可执行文件（Windows 是 `yt-dlp.exe`，约 17MB）。它只是**基线版本** ——
-程序启动后会复制到 `%APPDATA%` 并自更新，所以随包这份不必总是最新。
+yt-dlp 从 <https://github.com/yt-dlp/yt-dlp/releases/latest> 取，**注意别下错**：
+
+| 平台 | 下这个资产 | 放成 |
+|---|---|---|
+| Windows | `yt-dlp.exe`（17MB） | `vendor/ytdlp/yt-dlp.exe` |
+| macOS | `yt-dlp_macos`（35MB） | `vendor/ytdlp/yt-dlp` ← **要改名**，还要 `chmod +x` |
+
+> ⚠️ **release 里那个名字刚好叫 `yt-dlp` 的（3MB）不能用** —— 它是
+> `#!/usr/bin/env python3` 脚本，要目标机器自己装了 Python 才跑得起来。
+> 这个坑在 mac 上几乎必踩：文件名天然就对、不用改名，**开发机上还能正常输出版本号**
+> （因为开发机有 python3），一路顺畅到装进没装 Python 的同事电脑上才发现废了。
+> Windows 反而不会中招 —— 那边要的是 `yt-dlp.exe`，名字对不上。
+> spec 打包前会检查文件开头是不是 `#!`，下错了当场拦下。
+
+它只是**基线版本** —— 程序启动后会复制到用户目录并自更新，所以随包这份不必总是最新。
 
 Windows：deno 从 <https://github.com/denoland/deno/releases> 下
 `deno-x86_64-pc-windows-msvc.zip`，ffmpeg 用 essentials 版即可（那是静态的）。
@@ -107,8 +119,8 @@ pyinstaller VideoDownloader.spec
 iscc installer.iss
 ```
 
-spec 会在开打前断言 vendor 里的 ffmpeg 和 deno 都在 —— 缺了当场报错，
-而不是等装到同事电脑上才发现。
+spec 会在开打前断言 vendor 里的 yt-dlp / ffmpeg / deno 三个都在，并按当前平台
+把「该下哪个资产」一起打进报错信息里 —— 缺了当场报错，而不是等装到同事电脑上才发现。
 
 **如果仓库放在 Dropbox / OneDrive 里**，`iscc` 会报
 `The output file appears to be in use (32)` —— 同步客户端正在读那个刚写出来的
@@ -134,11 +146,18 @@ iscc /O"$env:TEMP\vd_installer" installer.iss
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-mkdir -p vendor/ffmpeg vendor/deno
+mkdir -p vendor/ytdlp vendor/ffmpeg vendor/deno
+
+# yt-dlp: 要 yt-dlp_macos (Mach-O), **不是**那个同名的 3MB python 脚本; 落地改名成 yt-dlp
+curl -L -o vendor/ytdlp/yt-dlp \
+  https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos
+chmod +x vendor/ytdlp/yt-dlp
+
 # ffmpeg 取静态构建, 不要用 Homebrew 的 —— 原因见下面那条坑
 curl -L -o vendor/ffmpeg/ffmpeg \
   https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/ffmpeg-darwin-arm64
 chmod +x vendor/ffmpeg/ffmpeg
+
 brew install deno && cp "$(which deno)" vendor/deno/
 
 python main.py                     # 先从源码跑一遍确认没问题

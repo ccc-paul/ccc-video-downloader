@@ -73,12 +73,22 @@ PyQt6 桌面应用，把 `yt-dlp` 包装成带队列的图形界面。
 
 ### 跑起来
 
+全新 clone 之后**先补 vendor 二进制**，否则打包会中止、下载也用不了：
+
 ```powershell
+python scripts\fetch_vendor.py       # 三个文件, 约 210MB, 已存在的会跳过
 uv pip install --python .venv\Scripts\python.exe -r requirements.txt
 .\.venv\Scripts\python.exe main.py
 ```
 
-**三个必须自备的二进制**（`vendor/` 已 gitignore，各开发机自己放）：
+mac 上把后两行换成 `pip install -r requirements.txt` 和 `python main.py`，
+脚本本身跨平台，会自动取对应平台/架构的资产。
+
+**为什么要自备**：`vendor/` 是 gitignore 的 —— 三个二进制加起来 200MB+，入库会让仓库
+永久背着它们，GitHub 单文件 100MB 还是硬上限（ffmpeg 97MB 已经贴边），而且它们分平台，
+提交进去就是翻倍。
+
+**三个必须自备的二进制**：
 
 | 放哪 | 干什么 | 缺了会怎样 |
 |---|---|---|
@@ -86,7 +96,10 @@ uv pip install --python .venv\Scripts\python.exe -r requirements.txt
 | `vendor/ffmpeg/ffmpeg`（Windows 是 `ffmpeg.exe`） | 合并音视频流 | 1080p 这类分离流下不了 |
 | `vendor/deno/deno`（Windows 是 `deno.exe`） | 算 YouTube 的 nsig 签名挑战 | **下载报 HTTP 403** |
 
-yt-dlp 从 <https://github.com/yt-dlp/yt-dlp/releases/latest> 取，**注意别下错**：
+其中 yt-dlp 只是**基线版本** —— 程序启动后会复制到用户目录并自更新，所以随包这份
+不必总是最新。
+
+**手工准备的话注意别下错 yt-dlp**（用上面的脚本就不必操心，它取的是对的那个）：
 
 | 平台 | 下这个资产 | 放成 |
 |---|---|---|
@@ -100,17 +113,12 @@ yt-dlp 从 <https://github.com/yt-dlp/yt-dlp/releases/latest> 取，**注意别�
 > Windows 反而不会中招 —— 那边要的是 `yt-dlp.exe`，名字对不上。
 > spec 打包前会检查文件开头是不是 `#!`，下错了当场拦下。
 
-它只是**基线版本** —— 程序启动后会复制到用户目录并自更新，所以随包这份不必总是最新。
+**ffmpeg 必须取静态构建**（脚本已经处理好了）。mac 上别图省事拿 `brew` 那个：
+它只有 441KB，解码器都在外部 dylib 里，打出来的包在自己机器上测什么都正常，
+发给没装 Homebrew 的人就「合并失败」。
 
-Windows：deno 从 <https://github.com/denoland/deno/releases> 下
-`deno-x86_64-pc-windows-msvc.zip`，ffmpeg 用 essentials 版即可（那是静态的）。
-
-macOS：deno 用 `brew install deno` 就行（它本身是静态的，163 MB）。
-**ffmpeg 不能用 Homebrew 那个** —— 见 [在 Mac 上构建](#在-mac-上构建) 里的坑，
-取静态构建。
-
-程序会先找 `vendor/`，找不到再回落系统 PATH 上的同名程序。开发期只是自己跑一跑，
-用 PATH 上的也无所谓；**要打包发给别人就必须是静态二进制**。
+程序会先找 `vendor/`，找不到再回落系统 PATH 上的同名程序。开发期用 PATH 上的也无所谓；
+**要打包发给别人就必须是 `vendor/` 里的静态二进制**。
 
 ### 打包（Windows）
 

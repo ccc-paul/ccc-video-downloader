@@ -44,13 +44,17 @@ TAG_FILE = "@@F@@"
 # yt-dlp 对空字段打印的占位符
 _NA = "NA"
 
+# 默认模板拼出来的名字动辄上百字符 (标题 + 频道名), 用户抱怨"长得惊人"。
+# 允许在界面上自己起名, 见 sanitize_stem / filename_template_for。
+DEFAULT_FILENAME_TEMPLATE = "%(title)s - %(uploader)s.%(ext)s"
+
 
 @dataclass(frozen=True)
 class DownloadOptions:
     format_kind: FormatKind
     quality: str            # mp4: "480" / "720" / "1080" / "1440" / "best" ; mp3: "128" / "192" / "320"
     output_dir: Path
-    filename_template: str = "%(title)s - %(uploader)s.%(ext)s"
+    filename_template: str = DEFAULT_FILENAME_TEMPLATE
     ffmpeg_location: Path | None = None  # 目录, 不是 exe
 
 
@@ -87,6 +91,69 @@ def clean_url(url: str) -> tuple[str, list[str]]:
         qs.pop(k, None)
     new_query = urlencode(qs, doseq=True)
     return urlunparse(parsed._replace(query=new_query)), stripped
+
+
+# ---------- 自定义文件名 ----------
+
+# Windows 的非法字符最多, 一律按它来: \ / : * ? " < > | 再加控制字符。
+# mac/Linux 只禁 "/" 和 \0, 但跨平台统一规则更好解释 —— 同一个名字在两边都能用。
+_ILLEGAL_FILENAME_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
+# Windows 保留设备名 (不分大小写, 带扩展名也算), 建出来的文件打不开
+_WIN_RESERVED = {
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+}
+# 上限取 100: Windows 整条路径 260 的限制下, 给目录留足余量
+MAX_FILENAME_STEM = 100
+
+
+def sanitize_stem(name: str, max_len: int = MAX_FILENAME_STEM) -> str:
+    """把用户输入的文件名洗成安全的主干名 (不含扩展名). 洗不出东西就返回 ""。
+
+    做四件事, 每件都是踩得到的:
+    - 去掉路径分隔符和非法字符 —— 否则 "a/b" 会被当成子目录, 甚至写到别处去
+    - 去掉用户顺手打的 .mp4 / .mp3 后缀 —— 否则成品是 "片子.mp4.mp4"
+    - Windows 保留名加下划线 (CON / NUL / COM1 …), 那些名字建出来的文件打不开
+    - 收尾的点和空格在 Windows 上会被悄悄吃掉, 一并去掉; 再按长度截断
+    """
+    stem = _ILLEGAL_FILENAME_RE.sub("", name)
+    # 去掉非法字符后常留下双空格 ("讲道 / 测试" → "讲道  测试"), 收一下
+    stem = re.sub(r"\s+", " ", stem).strip()
+    for ext in (".mp4", ".mp3"):
+        if stem.lower().endswith(ext):
+            stem = stem[: -len(ext)].strip()
+    stem = stem.strip(". ")
+    if stem.upper() in _WIN_RESERVED:
+        stem += "_"
+    return stem[:max_len].strip(". ")
+
+
+def filename_template_for(stem: str) -> str:
+    """把主干名拼成 yt-dlp 的 -o 模板. 空字符串回落到默认模板。
+
+    **必须转义 %**: yt-dlp 的输出模板里 % 有特殊含义, 用户名字里带一个
+    ("50%off") 就会被当成字段开头, 轻则名字错乱重则直接报错。yt-dlp 用 %% 表示字面量。
+    """
+    if not stem:
+        return DEFAULT_FILENAME_TEMPLATE
+    return f"{stem.replace('%', '%%')}.%(ext)s"
+
+
+def unique_stem(output_dir: Path, stem: str, ext: str) -> str:
+    """同名文件已存在时补 " (2)" / " (3)" …
+
+    不做这一步的话, yt-dlp 见到同名文件会**跳过下载**并照常报成功 —— 用户给两个
+    不同的视频起了同一个名字, 第二个悄悄没下, 队列行还指着第一个的文件。
+    """
+    if not stem:
+        return stem
+    candidate = stem
+    n = 2
+    while (output_dir / f"{candidate}.{ext}").exists():
+        candidate = f"{stem} ({n})"
+        n += 1
+    return candidate
 
 
 def format_selector(options: DownloadOptions) -> str:

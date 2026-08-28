@@ -24,7 +24,14 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from app.core.ytdlp_wrapper import DownloadOptions, strip_ansi
+from app.core.ytdlp_wrapper import (
+    MAX_FILENAME_STEM,
+    DownloadOptions,
+    filename_template_for,
+    sanitize_stem,
+    strip_ansi,
+    unique_stem,
+)
 from app.infra.config import (
     default_download_dir,
     load_config,
@@ -73,6 +80,7 @@ class DownloaderPage(QWidget):
         root.addWidget(subtitle)
 
         root.addLayout(self._build_url_row())
+        root.addLayout(self._build_filename_row())
 
         self._strip_label = QLabel("")
         self._strip_label.setObjectName("pageHint")
@@ -122,6 +130,22 @@ class DownloaderPage(QWidget):
         paste = QPushButton(t("downloader.url.paste"))
         paste.clicked.connect(self._on_paste)
         row.addWidget(paste)
+        return row
+
+    def _build_filename_row(self) -> QHBoxLayout:
+        """自定义输出文件名 (可选).
+
+        默认模板是 "标题 - 频道.ext", YouTube 的标题动辄上百字符, 拼出来的名字长到
+        在访达里根本看不全 (2026-08-27 反馈)。留空就还是老样子。
+        """
+        row = QHBoxLayout()
+        row.addWidget(QLabel(t("downloader.filename.label")))
+        self._filename_input = QLineEdit()
+        self._filename_input.setPlaceholderText(t("downloader.filename.placeholder"))
+        self._filename_input.setMaxLength(MAX_FILENAME_STEM)
+        # 回车等于点「加入下载队列」—— 手已经在键盘上了
+        self._filename_input.returnPressed.connect(self._on_add)
+        row.addWidget(self._filename_input, stretch=1)
         return row
 
     def _build_options_row(self) -> QHBoxLayout:
@@ -290,10 +314,24 @@ class DownloaderPage(QWidget):
             fmt = "mp3"
             quality = self._audio_quality.currentData()
 
+        raw_name = self._filename_input.text().strip()
+        stem = sanitize_stem(raw_name)
+        if raw_name and not stem:
+            # 整串都是非法字符 —— 别默默回落到默认名字, 用户会以为自己改了名
+            QMessageBox.warning(
+                self, t("downloader.error.title"),
+                t("downloader.error.bad_filename").format(name=raw_name),
+            )
+            return
+        # 同名文件已存在就补 " (2)": yt-dlp 撞名会跳过下载还报成功,
+        # 两个不同视频起同一个名字时第二个会悄悄没下
+        stem = unique_stem(output_dir, stem, fmt)
+
         options = DownloadOptions(
             format_kind=fmt,
             quality=quality,
             output_dir=output_dir,
+            filename_template=filename_template_for(stem),
         )
 
         from app.core.ytdlp_wrapper import clean_url
@@ -306,6 +344,7 @@ class DownloaderPage(QWidget):
 
         self._service.add_job(cleaned, options)
         self._url_input.clear()
+        self._filename_input.clear()
         self._remember_options()  # 下次打开还是这套
 
     def _add_job_row(self, job: DownloadJob) -> None:

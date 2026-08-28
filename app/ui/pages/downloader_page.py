@@ -226,7 +226,7 @@ class DownloaderPage(QWidget):
             self._radio_mp4.setChecked(True)
 
         for combo, key, fallback in (
-            (self._video_quality, "video_quality", "1080"),
+            (self._video_quality, "video_quality", "720"),
             (self._audio_quality, "audio_quality", "192"),
         ):
             index = combo.findData(cfg.get(key, fallback))

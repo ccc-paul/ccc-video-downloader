@@ -50,7 +50,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "download": {
         "output_dir": "",       # 空 = 用 default_download_dir()
         "format_kind": "mp4",
-        "video_quality": "1080",
+        # 720p 起步: 1080p 的 H.264 体积明显更大 (同一条 MV 63MB vs 36MB),
+        # 而这个工具的东西多半是要发给同事的 —— 传得动比多那点清晰度重要 (2026-08-28)
+        "video_quality": "720",
         "audio_quality": "192",
     },
     "ui": {

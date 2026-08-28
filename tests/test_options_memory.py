@@ -55,9 +55,10 @@ class TestDefaults:
 
         assert config.default_download_dir() == Path("/home/x/Videos")
 
-    def test_defaults_mp4_1080(self, page):
+    def test_defaults_mp4_720(self, page):
+        """默认 720p: H.264 之后 1080p 体积明显更大, 而这些文件多半要发给同事。"""
         assert page._radio_mp4.isChecked()
-        assert page._video_quality.currentData() == "1080"
+        assert page._video_quality.currentData() == "720"
 
 
 class TestRemember:
@@ -106,7 +107,7 @@ class TestRobustness:
         from app.ui.pages.downloader_page import DownloaderPage
 
         page = DownloaderPage()
-        assert page._video_quality.currentData() == "1080"
+        assert page._video_quality.currentData() == "720"
 
     def test_missing_dir_still_shown(self, isolated_config, _qapp, tmp_path):
         """上次的目录被删了: 仍显示出来让用户看见并自行改, 不要静默换成别处."""

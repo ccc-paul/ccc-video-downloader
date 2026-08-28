@@ -32,6 +32,7 @@ STRINGS: Final[dict[str, dict[str, str]]] = {
         "downloader.quality.audio": "音质:",
         "downloader.output.dir": "保存到:",
         "common.browse": "浏览...",
+        "common.open.dir": "📂 打开保存文件夹",
         "downloader.add": "▶ 加入下载队列",
         # ---- 队列 ----
         "downloader.queue.label": "下载队列",
@@ -52,6 +53,7 @@ STRINGS: Final[dict[str, dict[str, str]]] = {
         "downloader.error.no_ffmpeg": "缺少 ffmpeg, 无法合并音视频。\n请重新安装本程序 (安装包自带 ffmpeg), 或联系 IT。",
         # ---- 本分支新增 ----
         "downloader.error.no_dir": "请先选择保存位置",
+        "downloader.error.dir_gone": "这个文件夹已经不在了:\n{dir}",
         "downloader.error.bad_dir": "无法使用这个保存位置:\n{dir}\n\n{err}",
         "status.ytdlp.checking": "yt-dlp 检测中…",
         "status.ffmpeg": "ffmpeg",
@@ -74,6 +76,7 @@ STRINGS: Final[dict[str, dict[str, str]]] = {
         "downloader.quality.audio": "Audio bitrate:",
         "downloader.output.dir": "Save to:",
         "common.browse": "Browse...",
+        "common.open.dir": "📂 Open save folder",
         "downloader.add": "▶ Add to queue",
         # ---- 队列 ----
         "downloader.queue.label": "Download queue",
@@ -94,6 +97,7 @@ STRINGS: Final[dict[str, dict[str, str]]] = {
         "downloader.error.no_ffmpeg": "ffmpeg is missing, so audio and video cannot be merged.\nPlease reinstall this app (the installer bundles ffmpeg) or contact IT.",
         # ---- 本分支新增 ----
         "downloader.error.no_dir": "Choose a save location first",
+        "downloader.error.dir_gone": "This folder no longer exists:\n{dir}",
         "downloader.error.bad_dir": "Cannot use this save location:\n{dir}\n\n{err}",
         "status.ytdlp.checking": "checking yt-dlp…",
         "status.ffmpeg": "ffmpeg",

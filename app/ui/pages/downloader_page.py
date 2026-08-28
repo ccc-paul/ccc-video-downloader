@@ -30,7 +30,7 @@ from app.infra.config import (
     load_config,
     remember_download_options,
 )
-from app.infra.desktop import open_in_file_manager
+from app.infra.desktop import open_in_file_manager, reveal_in_file_manager
 from app.infra.ffmpeg import is_available as ffmpeg_available
 from app.infra.i18n import t
 from app.infra.logger import get_logger
@@ -175,6 +175,11 @@ class DownloaderPage(QWidget):
         browse = QPushButton(t("common.browse"))
         browse.clicked.connect(self._on_browse_dir)
         row.addWidget(browse)
+        # 「浏览...」是**选目录**, 弹的是选择框; 想直接去文件管理器看看下好的东西,
+        # 得另给一个入口 —— 否则用户只能点浏览, 然后对着一个文件全灰的选择框发愣
+        # (2026-08-24 反馈)。
+        self._open_dir_btn = _icon_button(t("common.open.dir"), self._on_open_dir)
+        row.addWidget(self._open_dir_btn)
 
         return row
 
@@ -232,6 +237,22 @@ class DownloaderPage(QWidget):
         text = cb.text().strip()
         if text:
             self._url_input.setText(text)
+
+    def _on_open_dir(self) -> None:
+        """在系统文件管理器里打开当前的保存目录."""
+        raw = self._output_dir.text().strip()
+        if not raw:
+            QMessageBox.warning(self, t("downloader.error.title"), t("downloader.error.no_dir"))
+            return
+        target = Path(raw)
+        if not target.is_dir():
+            # 目录被删了/换了盘符; 别静默什么也不发生, 那看起来像按钮坏了
+            QMessageBox.warning(
+                self, t("downloader.error.title"),
+                t("downloader.error.dir_gone").format(dir=target),
+            )
+            return
+        open_in_file_manager(target)
 
     def _on_browse_dir(self) -> None:
         d = QFileDialog.getExistingDirectory(self, t("downloader.output.dir"), self._output_dir.text())
@@ -491,9 +512,16 @@ class _JobRowWidget(QFrame):
         self._job.cancel()
 
     def _on_open(self) -> None:
+        """在文件管理器里**选中**下好的文件, 而不是只打开它所在的文件夹.
+
+        README 一直是这么承诺的 ("点那行的 📂 会直接在文件夹里选中它"), 但之前调的是
+        open_in_file_manager —— 文件夹一多, 用户还得自己在里面找。reveal 早就写好了
+        (mac `open -R` / Windows `explorer /select`), 只是没被接上 (2026-08-24)。
+        文件不存在时 reveal 会自动回落到打开父目录。
+        """
         if not self._job.output_path:
             return
-        open_in_file_manager(self._job.output_path.parent)
+        reveal_in_file_manager(self._job.output_path)
 
 
 # 共用实现在 widgets/icon_label.py; 这里保留同名薄封装, 免得改动本页各处调用点

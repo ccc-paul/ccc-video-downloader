@@ -46,7 +46,9 @@ class _UpdateWorker(QObject):
             ok, detail = ytdlp_bin.probe()
         except Exception as e:  # noqa: BLE001 — 探测失败也只是显示不出版本
             ok, detail = False, f"探测异常: {e}"
-        self.probed.emit(ok, detail)
+        # 关窗掐掉的探测不算结果 —— 再往状态栏推就是在退出路上留一条假故障
+        if not probe.is_cancelled():
+            self.probed.emit(ok, detail)
 
         try:
             changed, message = ytdlp_bin.self_update()

@@ -51,6 +51,15 @@ def kill_running() -> None:
                 pass
 
 
+def is_cancelled() -> bool:
+    """关窗流程是否已经把子进程掐了.
+
+    调用方要用它把"取消"和"真故障"分开 —— 取消是我们自己干的, 不是 yt-dlp 坏了,
+    不该写进缓存, 更不该拿去当版本号往日志和状态栏上报。
+    """
+    return _cancelled
+
+
 def run_version(exe: Path, *args: str, timeout: float = 8.0) -> tuple[bool, str]:
     """跑 `exe args` 并取首行输出. 返回 (是否成功, 版本串或失败原因).
 

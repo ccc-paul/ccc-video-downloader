@@ -29,6 +29,8 @@ from pathlib import Path
 
 from app.infra.config import APPDATA_DIR
 from app.infra.logger import get_logger
+# run_version 单独引进来是为了能被测试 monkeypatch; 模块本身也要, 用来问取消状态
+from app.infra import probe as _probe
 from app.infra.probe import run_version
 
 log = get_logger("ytdlp")
@@ -103,9 +105,16 @@ def probe(refresh: bool = False) -> tuple[bool, str]:
 
     exe = find_ytdlp()
     if exe is None:
-        _probe_cache = (False, "未找到 yt-dlp")
+        result = (False, "未找到 yt-dlp")
     else:
-        _probe_cache = run_version(exe, "--version", timeout=_PROBE_TIMEOUT)
+        result = run_version(exe, "--version", timeout=_PROBE_TIMEOUT)
+
+    # 关窗掐掉的探测不是探测结果, 不许进缓存 —— 否则"已取消"会顶掉上一次探到的
+    # 真版本号, 状态栏和日志跟着报一条假故障 (实测: "yt-dlp: 不可用 —— 已取消")
+    if _probe.is_cancelled():
+        return _probe_cache or result
+
+    _probe_cache = result
     return _probe_cache
 
 
@@ -131,11 +140,15 @@ def self_update(timeout: float = 120.0) -> tuple[bool, str]:
     before = probe()[1]
     ok, detail = run_version(exe, "--update-to", "stable", timeout=timeout)
     if not ok:
+        if _probe.is_cancelled():
+            return False, "更新被关窗打断, 下次启动再更新"
         return False, f"更新失败 (不影响使用): {detail}"
 
-    global _probe_cache
-    _probe_cache = run_version(exe, "--version", timeout=_PROBE_TIMEOUT)
-    after = _probe_cache[1]
+    after = probe(refresh=True)[1]
+    if _probe.is_cancelled():
+        # 更新本身可能已经成了, 但版本号问不到了。**别把"已取消"当版本号往外报** ——
+        # 会拼出 "yt-dlp 已更新: 2026.08.19 → 已取消" 这种自相矛盾的日志。
+        return False, "更新被关窗打断, 下次启动再更新"
     if after and after != before:
         return True, f"yt-dlp 已更新: {before} → {after}"
     return False, f"yt-dlp 已是最新 ({after or before})"

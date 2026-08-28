@@ -121,3 +121,50 @@ class TestCancel:
         monkeypatch.setattr(probe_mod, "_cancelled", False)
         monkeypatch.setattr(probe_mod, "_live", {_Dead()})
         probe_mod.kill_running()  # 不抛就算过
+
+    def test_取消不许污染探测缓存(self, monkeypatch):
+        """关窗掐掉的探测不是"探测失败" —— 不能顶掉已经探到的真版本号。
+
+        没这条护栏时: 关窗瞬间缓存被写成 (False, "已取消"), 状态栏和日志跟着报
+        "yt-dlp: 不可用 —— 已取消", 像是 yt-dlp 坏了, 其实是我们自己掐的。
+        """
+        from app.infra import probe as probe_mod
+
+        monkeypatch.setattr(probe_mod, "_cancelled", False)
+        monkeypatch.setattr(ytdlp_bin, "find_ytdlp", lambda: Path("/fake/yt-dlp"))
+        monkeypatch.setattr(ytdlp_bin, "run_version",
+                            lambda exe, *a, **kw: (True, "2026.08.19"))
+        assert ytdlp_bin.probe()[1] == "2026.08.19"
+
+        # 用户点了关闭: 之后的探测一律被掐
+        monkeypatch.setattr(probe_mod, "_cancelled", True)
+        monkeypatch.setattr(ytdlp_bin, "run_version",
+                            lambda exe, *a, **kw: (False, "已取消"))
+
+        assert ytdlp_bin.probe(refresh=True) == (True, "2026.08.19")
+        assert ytdlp_bin.probe() == (True, "2026.08.19"), "缓存不该被'已取消'顶掉"
+
+    def test_更新中途关窗不拿已取消当版本号(self, monkeypatch):
+        """曾经拼出过 "yt-dlp 已更新: 2026.08.19 → 已取消" 这种自相矛盾的日志:
+        更新命令跑成了, 回头问版本号时被关窗掐掉, "已取消"就被当成新版本号了。"""
+        from app.infra import probe as probe_mod
+
+        monkeypatch.setattr(probe_mod, "_cancelled", False)
+        monkeypatch.setattr(ytdlp_bin, "find_ytdlp", lambda: Path("/fake/yt-dlp"))
+
+        def _run(exe, *args, **kw):
+            if args and args[0] == "--update-to":
+                return True, "updated"          # 更新本身赶在关窗前跑完了
+            if probe_mod.is_cancelled():
+                return False, "已取消"           # 回头问版本号时被掐
+            return True, "2026.08.19"
+
+        monkeypatch.setattr(ytdlp_bin, "run_version", _run)
+        ytdlp_bin.probe()                        # 打底: 缓存 2026.08.19
+        monkeypatch.setattr(probe_mod, "_cancelled", True)
+
+        changed, message = ytdlp_bin.self_update()
+        assert changed is False, "问不到新版本号就别声称更新了"
+        assert "已取消" not in message, f"'已取消'不是版本号: {message}"
+        assert "打断" in message
+        assert ytdlp_bin.probe()[1] == "2026.08.19", "缓存要保住上一次的真版本号"

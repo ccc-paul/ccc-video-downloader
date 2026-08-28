@@ -16,12 +16,20 @@ hiddenimports 和 collect_all, 体积从 ~1GB 降到百来 MB。
 
 调试期把 CONSOLE 设 True 能看到导入错误; 交付时设 False。
 """
+import re
 import sys
 from pathlib import Path
 
 CONSOLE = False  # True=带控制台便于排错; False=无控制台正式交付
 
 _VENDOR = Path(SPECPATH) / "vendor"
+
+# 版本号从 app/__init__.py 读, 别再手抄 —— 抄漏了 .app 在访达里就一直报旧版本
+# (实测: 1.0.0 之后一直没跟上, 到 1.1.2 才发现 Finder 里还写着 1.0.0)。
+_VERSION = re.search(
+    r'__version__ = "([^"]+)"',
+    (Path(SPECPATH) / "app" / "__init__.py").read_text(encoding="utf-8"),
+).group(1)
 
 datas = [
     ("app/ui/resources/styles.qss", "app/ui/resources"),
@@ -167,7 +175,8 @@ if sys.platform == "darwin":
         info_plist={
             "CFBundleName": "视频下载器",
             "CFBundleDisplayName": "视频下载器",
-            "CFBundleShortVersionString": "1.0.0",
+            "CFBundleShortVersionString": _VERSION,
+            "CFBundleVersion": _VERSION,
             # Retina 下不加这条界面会被放大成糊的
             "NSHighResolutionCapable": True,
         },

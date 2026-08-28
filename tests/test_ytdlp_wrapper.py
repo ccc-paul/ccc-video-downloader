@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from app.core import ytdlp_wrapper as yw
 
 
@@ -53,10 +55,46 @@ def arg_after(args: list[str], flag: str) -> str:
     return args[args.index(flag) + 1]
 
 
+class TestH264Preference:
+    """1080p 及以下必须优先挑 H.264 (2026-08-28 实测踩到).
+
+    YouTube 的 AV1 也装在 mp4 容器里, 只写 `[ext=mp4]` 会挑到 `av01`。下载的人自己
+    (新款 Mac 硬解 AV1) 看不出问题, 发给同事就是「此文件包含与 QuickTime Player
+    不兼容的部分媒体」—— 用户发出去三首歌, 两首 av01 的都打不开, 唯一能放的那首
+    恰好是 avc1。
+    """
+
+    @pytest.mark.parametrize("quality", ["720", "1080"])
+    def test_优先_avc1(self, quality):
+        selector = yw.format_selector(opts(format_kind="mp4", quality=quality))
+        first = selector.split("/")[0]
+        assert "vcodec^=avc1" in first, f"第一档就该点名 H.264: {selector}"
+        assert f"height<={quality}" in first
+
+    @pytest.mark.parametrize("quality", ["720", "1080"])
+    def test_没有_H264_时仍能下(self, quality):
+        """有的视频压根没有 H.264 —— 退回原来的挑法, 总比下不了强。"""
+        selector = yw.format_selector(opts(format_kind="mp4", quality=quality))
+        fallbacks = selector.split("/")[1:]
+        assert any("ext=mp4" in f for f in fallbacks)
+        assert fallbacks[-1] == f"best[height<={quality}]"
+
+    @pytest.mark.parametrize("quality", ["1440", "best"])
+    def test_1440_及最佳_不降到_H264(self, quality):
+        """那个档位 YouTube 只有 VP9/AV1, 硬要 H.264 等于把用户要的画质降回 1080p。"""
+        selector = yw.format_selector(opts(format_kind="mp4", quality=quality))
+        assert "avc1" not in selector
+
+    def test_音频也挑_aac(self):
+        """Opus 一样会让 QuickTime 打不开。"""
+        selector = yw.format_selector(opts(format_kind="mp4", quality="1080"))
+        assert "bestaudio[ext=m4a]" in selector.split("/")[0]
+
+
 class TestBuildArgs:
     def test_mp4_1080_format_selector(self):
         args = yw.build_args(opts(format_kind="mp4", quality="1080"), "URL")
-        assert "bestvideo[height<=1080][ext=mp4]" in arg_after(args, "-f")
+        assert "bestvideo[height<=1080][vcodec^=avc1]" in arg_after(args, "-f")
         assert arg_after(args, "--merge-output-format") == "mp4"
 
     def test_mp4_best(self):

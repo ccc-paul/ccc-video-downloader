@@ -160,13 +160,35 @@ def unique_stem(output_dir: Path, stem: str, ext: str) -> str:
     return candidate
 
 
+# YouTube 的 H.264 一般只到 1080p, 再往上只有 VP9 / AV1。
+_H264_MAX_HEIGHT = 1080
+
+
 def format_selector(options: DownloadOptions) -> str:
-    """按格式/画质拼 -f 表达式 (与改造前的 Python API 版本保持一致)."""
+    """按格式/画质拼 -f 表达式.
+
+    **1080p 及以下优先挑 H.264 (avc1)**, 而不是只看容器 —— YouTube 的 AV1 也是装在
+    mp4 容器里的, 光写 `[ext=mp4]` 会挑到 `av01`。自己机器上能放 (新款 Mac 硬解 AV1),
+    发给同事就是「此文件包含与 QuickTime Player 不兼容的部分媒体」, 文件本身没坏,
+    是解不了码 (2026-08-28 实测: 用户发出去的三首歌, 两首是 av01 的都打不开,
+    唯一能放的那首恰好是 avc1)。
+
+    1440p / 最佳 不加这个偏好: 那个档位 YouTube 只有 VP9/AV1, 硬要 H.264 等于把用户
+    明确要的画质降回 1080p。选到那两档就是画质优先, 代价是老设备可能放不了。
+    """
     if options.format_kind == "mp4":
         if options.quality == "best":
             return "bestvideo+bestaudio/best"
         q = options.quality
-        return f"bestvideo[height<={q}][ext=mp4]+bestaudio[ext=m4a]/best[height<={q}]"
+        if int(q) > _H264_MAX_HEIGHT:
+            return f"bestvideo[height<={q}][ext=mp4]+bestaudio[ext=m4a]/best[height<={q}]"
+        return (
+            # ① H.264 + AAC: 到处都能放
+            f"bestvideo[height<={q}][vcodec^=avc1]+bestaudio[ext=m4a]/"
+            # ② 这个视频压根没有 H.264 时, 退回原来的挑法 (总比下不了强)
+            f"bestvideo[height<={q}][ext=mp4]+bestaudio[ext=m4a]/"
+            f"best[height<={q}]"
+        )
     if options.format_kind == "mp3":
         return "bestaudio/best"
     raise ValueError(f"unsupported format: {options.format_kind}")

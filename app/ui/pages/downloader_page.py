@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -312,6 +313,10 @@ class DownloaderPage(QWidget):
         self._queue_empty_label.setVisible(not has_jobs)
 
 
+# 标题/链接列的最小宽度: 再窄就只能一行挤两三个字, 还不如让窗口出横向滚动条
+_TITLE_MIN_WIDTH = 200
+
+
 class _JobRowWidget(QFrame):
     """队列里的单个任务行. 连接到 DownloadJob 的信号."""
 
@@ -349,13 +354,21 @@ class _JobRowWidget(QFrame):
         self._set_status_text(t("downloader.job.status.queued"))
 
         # 文件名 / 视频链接 分两行同列 (第一行文件名, 第二行灰色链接)
+        #
+        # **必须 setWordWrap(True) + 横向 Ignored**, 否则长标题会把整行撑爆:
+        # 不换行的 QLabel 其 minimumSizeHint 就是整串文字的宽度 (实测那条讚美之泉的
+        # 标题要 826px), 布局无法把它压窄, 于是右边的进度条和信息列被顶到窗口外面
+        # ——用户看到的就是"按钮跑到界面外了" (2026-08-24 反馈)。
+        # Ignored 让 label 不再拿 sizeHint 说话, 有多少宽度用多少, 剩下的往下换行;
+        # 再给个下限, 免得被进度条/信息列挤成一条缝。
         self._name_label = QLabel(job.url)
-        self._name_label.setWordWrap(False)
-        self._name_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self._url_label = QLabel(job.url)
         self._url_label.setObjectName("pageHint")
-        self._url_label.setWordWrap(False)
-        self._url_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        for label in (self._name_label, self._url_label):
+            label.setWordWrap(True)
+            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            label.setMinimumWidth(_TITLE_MIN_WIDTH)
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         title_col = QVBoxLayout()
         title_col.setSpacing(1)
         title_col.addWidget(self._name_label)

@@ -44,9 +44,13 @@ TAG_FILE = "@@F@@"
 # yt-dlp 对空字段打印的占位符
 _NA = "NA"
 
-# 默认模板拼出来的名字动辄上百字符 (标题 + 频道名), 用户抱怨"长得惊人"。
-# 允许在界面上自己起名, 见 sanitize_stem / filename_template_for。
-DEFAULT_FILENAME_TEMPLATE = "%(title)s - %(uploader)s.%(ext)s"
+# 默认文件名: 标题截 60 字符 + 频道名截 20 字符, 拼出来不超过 ~85 字符。
+# `%(title).60s` 是 yt-dlp 的字段截断语法 (就是 Python 的格式化精度)。
+#
+# 不截的话名字动辄上百字符 —— YouTube 的标题本来就长, 后面还要接频道名, 在访达/
+# 资源管理器里根本看不全, 用户原话是"长得惊人" (2026-08-27)。想要更短就在界面上
+# 自己起名, 见 sanitize_stem / filename_template_for。
+DEFAULT_FILENAME_TEMPLATE = "%(title).60s - %(uploader).20s.%(ext)s"
 
 
 @dataclass(frozen=True)

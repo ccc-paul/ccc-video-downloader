@@ -1,6 +1,6 @@
 """界面上自定义输出文件名 (2026-08-27 反馈: 默认名字"长得惊人").
 
-默认模板是 "%(title)s - %(uploader)s.%(ext)s", YouTube 标题动辄上百字符。
+默认模板是 "%(title).60s - %(uploader).20s.%(ext)s" (60/20 是 yt-dlp 的字段截断)。
 允许自己起名, 但用户输入的东西不能直接塞进 yt-dlp 的 -o。
 """
 from __future__ import annotations

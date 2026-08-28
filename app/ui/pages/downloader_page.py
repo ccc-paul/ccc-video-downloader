@@ -202,7 +202,8 @@ class DownloaderPage(QWidget):
         # 「浏览...」是**选目录**, 弹的是选择框; 想直接去文件管理器看看下好的东西,
         # 得另给一个入口 —— 否则用户只能点浏览, 然后对着一个文件全灰的选择框发愣
         # (2026-08-24 反馈)。
-        self._open_dir_btn = _icon_button(t("common.open.dir"), self._on_open_dir)
+        self._open_dir_btn = QPushButton(t("common.open.dir"))
+        self._open_dir_btn.clicked.connect(self._on_open_dir)
         row.addWidget(self._open_dir_btn)
 
         return row
@@ -375,6 +376,10 @@ class DownloaderPage(QWidget):
 
 # 标题/链接列的最小宽度: 再窄就只能一行挤两三个字, 还不如让窗口出横向滚动条
 _TITLE_MIN_WIDTH = 200
+# 信息列 (文件名 · 画质 · 大小 · 时间) 的宽度区间: 够放下常见文件名, 又不至于
+# 把标题挤没。文字在这个区间里自己折行。
+_INFO_MIN_WIDTH = 240
+_INFO_MAX_WIDTH = 320
 
 
 class _JobRowWidget(QFrame):
@@ -442,8 +447,15 @@ class _JobRowWidget(QFrame):
         layout.addWidget(self._progress)
 
         # 下载中显示 速度/ETA; 完成后显示 实际画质 · 文件大小 · 下载时间
+        # 装得下文件名, 就必须会换行 —— 否则长文件名把行撑爆, 又变回"进度条被顶出
+        # 可视区"那个 bug (见 tests/test_job_row_layout.py)。
+        # **这里不能用 Ignored**: 标题列是 stretch=1, 而 Ignored 会让本列的 sizeHint
+        # 被无视, 空间全被标题吃掉, 本列再按 minimumWidth 摆出去就超出行宽了。
+        # 改成限定宽度区间: 文字在 240~320 之间自己折行, 不参与抢空间。
         self._info_label = QLabel("")
-        self._info_label.setMinimumWidth(240)
+        self._info_label.setWordWrap(True)
+        self._info_label.setMinimumWidth(_INFO_MIN_WIDTH)
+        self._info_label.setMaximumWidth(_INFO_MAX_WIDTH)
         layout.addWidget(self._info_label)
 
         self._connect_job(job)
@@ -521,8 +533,8 @@ class _JobRowWidget(QFrame):
     def _on_finished(self, ok: bool, detail: str) -> None:
         self._cancel_btn.setVisible(False)
         if ok and self._job.output_path:
-            # 文件名替掉第一行的标题; info 区换成 画质 · 大小 · 时间
-            self._name_label.setText(self._job.output_path.name)
+            # 第一行保持视频标题 (自定义文件名时, 标题和文件名可能完全对不上, 两个都要
+            # 看得见); 文件名进 info 列, 排在 画质 · 大小 · 时间 前面 (2026-08-27)
             self._open_btn.setVisible(True)
             self._info_label.setText(self._completed_meta())
             # 兜底置满: 正常路径靠 yt-dlp 的 finished hook 推到 100%, 但合并/转码
@@ -537,8 +549,10 @@ class _JobRowWidget(QFrame):
             self._info_label.setText(strip_ansi(detail)[:60])
 
     def _completed_meta(self) -> str:
-        """完成后在 info 区显示: 实际画质 · 文件大小 · 下载时间 (跳过取不到的项)."""
+        """完成后在 info 区显示: 文件名 · 实际画质 · 文件大小 · 下载时间 (跳过取不到的项)."""
         parts: list[str] = []
+        if self._job.output_path:
+            parts.append(self._job.output_path.name)
         if self._job.actual_quality:
             parts.append(self._job.actual_quality)
         size = _file_size(self._job.output_path)

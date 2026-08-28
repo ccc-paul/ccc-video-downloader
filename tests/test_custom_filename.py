@@ -144,3 +144,55 @@ class TestPage:
         (tmp_path / "讲道.mp4").write_bytes(b"x")
         page._filename_input.setText("讲道")
         assert _added(page).filename_template == "讲道 (2).%(ext)s"
+
+
+class TestRowShowsBoth:
+    """下载完成后, 第一行保持视频标题, 文件名进信息列 (2026-08-27 反馈).
+
+    自定义文件名之后, 标题和文件名可能完全对不上 —— 两个都得看得见。
+    """
+
+    def _finished_row(self, tmp_path, title: str, filename: str):
+        from app.ui.pages.downloader_page import _JobRowWidget
+
+        from app.services.download_service import DownloadJob
+
+        job = DownloadJob("https://www.youtube.com/watch?v=abc",
+                          yw.DownloadOptions("mp4", "1080", tmp_path))
+        job.title = title
+        row = _JobRowWidget(job)
+        row._name_label.setText(title)
+        out = tmp_path / filename
+        out.write_bytes(b"x" * 2048)
+        job.output_path = out
+        job.actual_quality = "1080p"
+        row._on_finished(True, str(out))
+        return row
+
+    def test_第一行还是标题(self, _qapp, tmp_path):
+        row = self._finished_row(tmp_path, "很长的视频标题", "我起的名字.mp4")
+        assert row._name_label.text() == "很长的视频标题"
+
+    def test_信息列带上文件名(self, _qapp, tmp_path):
+        row = self._finished_row(tmp_path, "很长的视频标题", "我起的名字.mp4")
+        info = row._info_label.text()
+        assert info.startswith("我起的名字.mp4"), f"文件名应排在最前: {info}"
+        assert "1080p" in info and "KB" in info
+
+    def test_打开按钮出现(self, _qapp, tmp_path):
+        row = self._finished_row(tmp_path, "标题", "名字.mp4")
+        assert row._open_btn.isVisible() or row._open_btn.isVisibleTo(row)
+
+
+class TestOpenDirButtonIsText:
+    """「打开文件夹」按钮用文字, 与旁边的「浏览...」一致 (原来是个 📂 图标)."""
+
+    def test_是文字按钮(self, _qapp):
+        from app.infra.i18n import t
+        from app.ui.pages.downloader_page import DownloaderPage
+
+        page = DownloaderPage()
+        assert page._open_dir_btn.text() == t("common.open.dir")
+        assert "📂" not in page._open_dir_btn.text()
+        # icon_button 会把按钮钉成 40px 宽; 文字按钮不该被钉住
+        assert page._open_dir_btn.minimumWidth() != 40 or page._open_dir_btn.maximumWidth() > 40

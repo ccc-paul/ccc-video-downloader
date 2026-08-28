@@ -80,6 +80,30 @@ class TestWrap:
         assert wrapped > one_line, "没换行 —— 无空格的串要靠 WrapAnywhere 才能断开"
 
 
+class TestInfoColumn:
+    """信息列现在要装文件名 (文件名 · 画质 · 大小 · 时间), 同样不能把行撑爆。"""
+
+    def test_长文件名不撑宽行(self, _qapp):
+        short = _row(_qapp, "短标题")
+        short._info_label.setText("1080p  ·  14.1 MB  ·  20:06:32")
+        base = short.minimumSizeHint().width()
+
+        long_ = _row(_qapp, "短标题")
+        long_._info_label.setText(f"{LONG_TITLE}.mp4  ·  1080p  ·  14.1 MB  ·  20:06:32")
+
+        assert long_.minimumSizeHint().width() == base
+        assert long_._info_label.wordWrap() is True
+
+    def test_信息列不许用_Ignored(self, _qapp):
+        """踩过: Ignored 会让本列的 sizeHint 被无视, 空间被 stretch=1 的标题列全吃掉,
+        本列再按 minimumWidth 摆出去就超出行宽 —— 进度条和信息列又被顶出可视区。"""
+        from PyQt6.QtWidgets import QSizePolicy
+
+        row = _row(_qapp, "短标题")
+        assert row._info_label.sizePolicy().horizontalPolicy() != QSizePolicy.Policy.Ignored
+        assert row._info_label.maximumWidth() < 10_000, "得有上限, 否则又会抢标题的空间"
+
+
 class TestInPage:
     """放进真实页面 (含 QScrollArea) 里验最终效果。"""
 
@@ -97,6 +121,7 @@ class TestInPage:
         scroll = page.findChild(QScrollArea)
         row = scroll.widget().findChild(_JobRowWidget)
         row._name_label.setText(LONG_TITLE)
+        row._info_label.setText(f"{LONG_TITLE}.mp4  ·  1080p  ·  14.1 MB  ·  20:06:32")
         page.layout().activate()
         scroll.widget().layout().activate()
         QApplication.processEvents()

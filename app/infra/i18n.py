@@ -35,7 +35,7 @@ STRINGS: Final[dict[str, dict[str, str]]] = {
         "downloader.error.bad_filename": "这个文件名去掉非法字符后什么都不剩了:\n{name}\n\n不能用的字符: \\ / : * ? \" < > |",
         "downloader.output.dir": "保存到:",
         "common.browse": "浏览...",
-        "common.open.dir": "📂 打开保存文件夹",
+        "common.open.dir": "打开文件夹",
         "downloader.add": "▶ 加入下载队列",
         # ---- 队列 ----
         "downloader.queue.label": "下载队列",
@@ -82,7 +82,7 @@ STRINGS: Final[dict[str, dict[str, str]]] = {
         "downloader.error.bad_filename": "Nothing is left of this file name once illegal characters are removed:\n{name}\n\nNot allowed: \\ / : * ? \" < > |",
         "downloader.output.dir": "Save to:",
         "common.browse": "Browse...",
-        "common.open.dir": "📂 Open save folder",
+        "common.open.dir": "Open folder",
         "downloader.add": "▶ Add to queue",
         # ---- 队列 ----
         "downloader.queue.label": "Download queue",

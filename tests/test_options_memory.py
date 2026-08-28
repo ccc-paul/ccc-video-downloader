@@ -21,14 +21,7 @@ def _qapp():
     yield QApplication.instance() or QApplication([])
 
 
-@pytest.fixture
-def isolated_config(tmp_path, monkeypatch):
-    """把 config 指到临时目录, 别动开发机上真实的配置."""
-    cfg_path = tmp_path / "config.json"
-    monkeypatch.setattr(config, "APPDATA_DIR", tmp_path)
-    monkeypatch.setattr(config, "CONFIG_PATH", cfg_path)
-    return cfg_path
-
+# isolated_config 现在在 tests/conftest.py 里, 且是 autouse 的
 
 @pytest.fixture
 def page(_qapp, isolated_config):
